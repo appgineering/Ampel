@@ -5,9 +5,14 @@ import os
 /// See SPEC §4: drain on launch AND on every directory change; write-then-rename
 /// on the hook side means files are complete when visible; skip ".tmp-*";
 /// delete each file after applying; delete-and-log malformed files.
-final class EventWatcher {
+/// Mutable state (`source`, `descriptor`) is written once in `start()` and read
+/// only by the cancel handler, and draining happens exclusively on `queue`.
+final class EventWatcher: @unchecked Sendable {
     private let store: AmpelStore
     private let log = Logger(subsystem: "com.appgineering.ampel", category: "watcher")
+    private let queue = DispatchQueue(label: "com.appgineering.ampel.watcher")
+    private var source: DispatchSourceFileSystemObject?
+    private var descriptor: CInt = -1
 
     static var eventsDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -19,13 +24,57 @@ final class EventWatcher {
     }
 
     func start() {
-        // TODO(M2): open eventsDirectory with O_EVTONLY, create a
-        // DispatchSource.makeFileSystemObjectSource(eventMask: .write),
-        // drain once immediately, then drain on every event.
+        let dir = Self.eventsDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        queue.async { [weak self] in self?.drain() }
+
+        descriptor = open(dir.path, O_EVTONLY)
+        guard descriptor >= 0 else {
+            log.error("cannot open \(dir.path, privacy: .public) for watching")
+            return
+        }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor, eventMask: .write, queue: queue)
+        source.setEventHandler { [weak self] in self?.drain() }
+        source.setCancelHandler { [descriptor] in close(descriptor) }
+        source.resume()
+        self.source = source
     }
 
+    /// Applies and removes every complete spool file, oldest first.
+    /// Ordered by mtime (nanosecond resolution) because the hook's filenames
+    /// only carry whole seconds and collide routinely. See SPEC §4.
     func drain() {
-        // TODO(M2): list *.json sorted ascending by filename, decode HookEnvelope,
-        // hop to MainActor to store.apply(_:), then delete the file.
+        let fm = FileManager.default
+        let urls = (try? fm.contentsOfDirectory(
+            at: Self.eventsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: .skipsHiddenFiles)) ?? []
+
+        let files = urls.filter {
+            $0.pathExtension == "json" && !$0.lastPathComponent.hasPrefix(".tmp-")
+        }
+        var stamped: [(url: URL, mtime: Date)] = []
+        for url in files {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            stamped.append((url, values?.contentModificationDate ?? .distantPast))
+        }
+        let ordered = stamped.sorted { a, b in
+            if a.mtime != b.mtime { return a.mtime < b.mtime }
+            return a.url.lastPathComponent < b.url.lastPathComponent
+        }
+
+        for (url, _) in ordered {
+            defer { try? fm.removeItem(at: url) }
+            guard let data = try? Data(contentsOf: url),
+                  let envelope = try? JSONDecoder().decode(HookEnvelope.self, from: data) else {
+                log.error("dropping malformed spool file \(url.lastPathComponent, privacy: .public)")
+                continue
+            }
+            DispatchQueue.main.async { [store] in
+                MainActor.assumeIsolated { store.apply(envelope) }
+            }
+        }
     }
 }

@@ -3,6 +3,22 @@ import Foundation
 
 enum SessionActivity {
     case idle, working, attention
+
+    var label: String {
+        switch self {
+        case .idle: "Idle"
+        case .working: "Working"
+        case .attention: "Needs attention"
+        }
+    }
+
+    var color: NSColor {
+        switch self {
+        case .idle: .systemGreen
+        case .working: .systemYellow
+        case .attention: .systemRed
+        }
+    }
 }
 
 enum AggregateState {

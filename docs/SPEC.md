@@ -82,7 +82,7 @@ Transition table, keyed by `session_id`:
 | `Stop` / `SubagentStop` | `idle` |
 | `SessionEnd` | remove session |
 
-The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …). Only `message` is used; `notification_type` is a documented hook field kept in reserve if the two cases ever need to be distinguished.
+The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …). Only `message` is used; `notification_type` is a documented hook field kept in reserve if the two cases ever need to be distinguished. `lastMessage` is cleared whenever a session leaves `attention`, so a green row never shows a stale "waiting for your input".
 
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 
