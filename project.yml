@@ -30,7 +30,7 @@ targets:
       properties:
         CFBundleDisplayName: Ampel
         CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "4"
+        CFBundleVersion: "2026090701"
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "© 2026 Appgineering GbR"

@@ -63,6 +63,8 @@ xcodegen generate
 open Ampel.xcodeproj
 ```
 
+Build numbers are `yyyymmdd##`, reset daily, produced by `./Tools/next_build_number.py --write` and applied automatically by `./Tools/release.sh`.
+
 Run `./Tests/run.sh` for the self-checks: the session state machine, ccusage and plan-usage parsing, and the hook installer's merge against throwaway home directories. `./Tools/make-icon.sh` regenerates the app icon from vector source.
 
 ## Requirements

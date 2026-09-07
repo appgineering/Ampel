@@ -19,17 +19,10 @@ ZIP="dist/Ampel-$VERSION.zip"
 [ -z "$(git status --porcelain)" ] || { echo "working tree is dirty"; exit 1; }
 
 echo "==> version"
-/usr/bin/python3 - "$VERSION" <<'PY'
-import re, sys, subprocess
-version = sys.argv[1]
-text = open("project.yml").read()
-build = int(re.search(r'CFBundleVersion: "(\d+)"', text).group(1)) + 1
-text = re.sub(r'CFBundleShortVersionString: "[^"]+"',
-              f'CFBundleShortVersionString: "{version}"', text)
-text = re.sub(r'CFBundleVersion: "\d+"', f'CFBundleVersion: "{build}"', text)
-open("project.yml", "w").write(text)
-print(f"    {version} build {build}")
-PY
+/usr/bin/sed -i '' "s/CFBundleShortVersionString: \"[^\"]*\"/CFBundleShortVersionString: \\"$VERSION\\"/" project.yml
+# yyyymmdd##, counted from the previous value, so it resets each day.
+BUILD=$(./Tools/next_build_number.py --write)
+echo "    $VERSION build $BUILD"
 xcodegen generate >/dev/null
 
 echo "==> build and test"
