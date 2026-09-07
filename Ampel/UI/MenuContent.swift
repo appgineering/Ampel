@@ -47,7 +47,7 @@ struct MenuContent: View {
 
             LaunchAtLoginToggle()
 
-            // TODO(M5): "Install hooks…" button when HookInstaller.isInstalled == false.
+            InstallHooksButton()
 
             Button("Quit Ampel") {
                 NSApplication.shared.terminate(nil)
@@ -136,5 +136,30 @@ private struct UsageSection: View {
             usage = await provider.fetch()
             loaded = true
         }
+    }
+}
+
+/// Shown only until the hooks are in place. See SPEC §8.
+private struct InstallHooksButton: View {
+    private let installer = HookInstaller()
+    @State private var installed = true
+    @State private var failure: String?
+
+    var body: some View {
+        Group {
+            if let failure {
+                Text(failure).font(.caption).foregroundStyle(.red)
+            } else if !installed {
+                Button("Install hooks…") {
+                    do {
+                        try installer.install()
+                        installed = true
+                    } catch {
+                        failure = error.localizedDescription
+                    }
+                }
+            }
+        }
+        .task { installed = installer.isInstalled }
     }
 }

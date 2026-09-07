@@ -15,6 +15,16 @@ enum StatusIcon {
         return image
     }
 
-    // TODO(M5): pre-render pulse frames for .attention (alpha 1.0 ↔ 0.5,
-    // 1s ease-in-out) and swap them via a timer that ONLY runs while red.
+    /// One second of ease-in-out from full opacity down to half and back,
+    /// pre-rendered so the pulse costs a dictionary lookup per frame rather
+    /// than a redraw. See SPEC §5.
+    static let pulseFrames: [NSImage] = (0..<pulseFrameCount).map { frame in
+        let phase = Double(frame) / Double(pulseFrameCount)
+        // A raised cosine is the ease-in-out; no easing curve object needed.
+        let eased = (1 - cos(2 * .pi * phase)) / 2
+        return image(for: .attention, alpha: 1.0 - 0.5 * eased)
+    }
+
+    static let pulseFrameCount = 8
+    static let pulseInterval = 1.0 / Double(pulseFrameCount)
 }
