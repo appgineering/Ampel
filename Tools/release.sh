@@ -81,4 +81,7 @@ git -C "$TAP" commit -qam "Update ampel to $VERSION"
 git -C "$TAP" push -q
 rm -rf "$TAP"
 
+echo "==> homebrew-cask notability"
+./Tools/notability.sh
+
 echo "==> done: $VERSION ($SHA)"
