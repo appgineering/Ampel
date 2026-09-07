@@ -9,13 +9,25 @@ A native macOS menu bar app that shows, at a glance, whether any running Claude 
 | 🟢 Green | `idle` | Last turn finished, nothing pending |
 | ⚪️ Gray | `off` | No active Claude Code sessions |
 
-Multiple sessions aggregate worst-case: red beats yellow beats green. Clicking the icon opens a menu listing each session (project, state, last activity) plus a usage section: current 5-hour rate-limit block (cost, tokens, reset time) and today's totals.
+Multiple sessions aggregate worst-case: red beats yellow beats green. Clicking the icon, with either button, opens a menu listing each session (project, state, last activity) plus a usage section. Sessions sharing a project name get a short session id so parallel sessions in one repo stay tellable apart.
+
+Red means Claude is blocked on a decision from you. Claude Code also fires a notification whenever a session sits at an empty prompt, which Ampel deliberately ignores: treating that as attention pinned the icon red for as long as any session was merely open.
 
 ## How it works
 
 Claude Code hooks (configured in `~/.claude/settings.json`) fire a tiny shell script on lifecycle events. The script drops one JSON file per event into `~/.ampel/events/`. Ampel.app watches that directory, updates per-session state, and renders the aggregate as a colored menu bar icon. No local server, no dependencies in the hook path.
 
-Usage numbers come from [ccusage](https://github.com/ryoppippi/ccusage), which parses the JSONL transcripts under `~/.claude/projects/`. Optional — the app degrades gracefully without it.
+## Usage numbers
+
+Two sources, showing different things.
+
+**Real plan limits**, the same percentages `/usage` shows, are opt-in under Settings > Usage. Claude Code passes them on the statusLine hook's stdin, so Ampel installs a statusLine wrapper that chains onto whatever statusline you already have and restores it when you turn the setting off. Per-model figures are not in the payload and cannot be shown.
+
+**Estimated cost** comes from [ccusage](https://github.com/ryoppippi/ccusage), which parses the JSONL transcripts under `~/.claude/projects/`. Optional, and the app degrades to a single line without it. On a subscription plan these dollars are notional, what the same tokens would have cost on the API, so they will never match the plan percentages.
+
+## Settings
+
+A normal preferences window with General, Usage and About panes: launch at login, whether the icon pulses and whether blocked sessions raise a notification, how the usage section is drawn (bars, numbers only, or hidden), and the real-plan-usage opt-in.
 
 ## Documents
 
@@ -33,8 +45,10 @@ xcodegen generate
 open Ampel.xcodeproj
 ```
 
-Source stubs under `Ampel/` compile as-is and show a gray circle in the menu bar; the `TODO(M2..M5)` markers map to the milestones.
+Run `./Tests/run.sh` for the self-checks: the session state machine, ccusage and plan-usage parsing, and the hook installer's merge against throwaway home directories. `./Tools/make-icon.sh` regenerates the app icon from vector source.
 
 ## Requirements
 
-macOS 14+, Xcode 16+, XcodeGen, Claude Code CLI. Not sandboxed, not for the App Store — a personal utility.
+macOS 14+, Xcode 16+, XcodeGen, Claude Code CLI. Not sandboxed, not for the App Store, a personal utility.
+
+Set `~/.ampel/debug` to make the hook append every envelope it writes to `~/.ampel/hook.log`. Ampel deletes each spool file once applied, so this is the only way to reconstruct what a session actually emitted.

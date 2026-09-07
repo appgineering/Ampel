@@ -15,7 +15,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let store: AmpelStore
     private let settings: Settings
-    private let windows: AuxiliaryWindows
+    private let settingsWindow: SettingsWindow
+    /// Owned here, not by the popover content, which is rebuilt on every open.
+    /// A per-open provider threw away its cache and reloaded from scratch.
+    private let usage = UsageProvider()
 
     private var state: AggregateState = .off
     private var monitor: Any?
@@ -23,7 +26,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     init(store: AmpelStore, settings: Settings) {
         self.store = store
         self.settings = settings
-        self.windows = AuxiliaryWindows(settings: settings)
+        self.settingsWindow = SettingsWindow(settings: settings)
         super.init()
 
         popover.behavior = .transient
@@ -82,8 +85,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             popover.contentViewController = NSHostingController(
                 rootView: MenuContent(store: store,
                                       settings: settings,
-                                      openSettings: { [windows] in windows.showSettings() },
-                                      openAbout: { [windows] in windows.showAbout() }))
+                                      provider: usage,
+                                      openSettings: { [settingsWindow] in settingsWindow.show() },
+                                      openAbout: { [settingsWindow] in settingsWindow.showAbout() }))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
             popover.contentViewController?.view.window?.makeKey()
         }

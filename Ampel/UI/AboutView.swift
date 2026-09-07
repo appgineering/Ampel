@@ -53,7 +53,8 @@ struct AboutView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(20)
-        .frame(width: 400, alignment: .leading)
+        .frame(width: 460, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

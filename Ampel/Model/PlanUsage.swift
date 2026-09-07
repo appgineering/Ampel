@@ -4,8 +4,8 @@ import Foundation
 /// hook's stdin. Unlike ccusage's dollar estimates, these are the same numbers
 /// the /usage screen shows. Only present for Pro and Max subscribers, and only
 /// after a session's first API response.
-struct PlanUsage: Equatable {
-    struct Window: Equatable {
+struct PlanUsage: Codable, Equatable, Sendable {
+    struct Window: Codable, Equatable, Sendable {
         var usedPercentage: Double
         var resetsAt: Date?
     }

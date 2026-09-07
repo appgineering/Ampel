@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// Shells out to ccusage for the usage section. See SPEC §7.
-struct UsageSnapshot {
+struct UsageSnapshot: Codable, Sendable {
     var blockCost: Double?
     var blockTokens: Int?
     /// How far through the rate limit window we are, 0...1. The window has a
@@ -43,109 +43,91 @@ struct UsageSnapshot {
 /// Resolution order: `ccusage` on PATH, then `bunx ccusage`, then `npx -y ccusage`.
 /// Runs off the main thread with a 10s timeout and a 60s cache. Any failure
 /// yields nil and the menu falls back to a static line; it never blocks.
-actor UsageProvider {
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "usage")
-    private let timeout: TimeInterval = 10
-    private let cacheLifetime: TimeInterval = 60
+@MainActor
+@Observable
+final class UsageProvider {
+    /// The last figures we had, shown immediately on open. Nil only before the
+    /// very first successful run on this machine.
+    private(set) var snapshot: UsageSnapshot?
+    /// True while ccusage is running behind an already-displayed snapshot.
+    private(set) var isRefreshing = false
+    private(set) var failed = false
 
-    private var cached: UsageSnapshot?
-    private var cachedAt: Date?
+    @ObservationIgnored private let log = Logger(subsystem: "com.appgineering.ampel", category: "usage")
+    @ObservationIgnored private let cacheLifetime: TimeInterval = 60
+    @ObservationIgnored private var lastFetched: Date?
     /// The argv prefix that last worked, so we stop paying for probing.
-    private var runner: [String]?
-    private var loginPath: String?
+    @ObservationIgnored private var runner: [String]?
+    @ObservationIgnored private var loginPath: String?
 
-    private static let candidates = [["ccusage"], ["bunx", "ccusage"], ["npx", "-y", "ccusage"]]
 
-    func fetch() async -> UsageSnapshot? {
-        // Plan usage is a local file write by Claude Code, so it is always
-        // read fresh; only the ccusage subprocesses are worth caching.
-        let plan = PlanUsage.read()
-        if let cached, let cachedAt, Date().timeIntervalSince(cachedAt) < cacheLifetime {
-            var snapshot = cached
-            snapshot.plan = plan
-            return snapshot
-        }
-        guard let blocks = json(["blocks", "--json"]), let daily = json(["daily", "--json"]) else {
-            // Plan usage alone is still worth showing.
-            return plan.map { UsageSnapshot(todayCost: 0, plan: $0) }
-        }
-        guard var snapshot = Self.parse(blocks: blocks, daily: daily) else {
-            log.error("ccusage ran but its output did not parse")
-            return nil
-        }
-        snapshot.plan = plan
-        cached = snapshot
-        cachedAt = Date()
-        return snapshot
+    static var cacheURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".ampel/usage-cache.json")
     }
 
-    // MARK: - ccusage invocation
-
-    private func json(_ args: [String]) -> [String: Any]? {
-        for candidate in runner.map({ [$0] }) ?? Self.candidates {
-            guard let data = run(candidate + args) else { continue }
-            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                log.error("\(candidate.joined(separator: " "), privacy: .public) produced unparseable output")
-                continue
-            }
-            runner = candidate
-            return object
+    init() {
+        // Persisted, so the first open after a relaunch shows figures rather
+        // than an empty loading state.
+        if let data = try? Data(contentsOf: Self.cacheURL),
+           let stored = try? JSONDecoder().decode(UsageSnapshot.self, from: data) {
+            snapshot = stored
         }
-        runner = nil
-        return nil
     }
 
-    private func run(_ argv: [String]) -> Data? {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = argv
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = shellPath()
-        process.environment = environment
+    /// Called every time the menu opens. Plan usage is a local file so it is
+    /// always current; ccusage is a subprocess, so it refreshes at most once a
+    /// minute and never blocks what is already on screen.
+    func refresh() {
+        var current = snapshot ?? UsageSnapshot(todayCost: 0)
+        current.plan = PlanUsage.read()
+        snapshot = current
 
-        do { try process.run() } catch {
-            log.debug("cannot run \(argv.joined(separator: " "), privacy: .public)")
-            return nil
+        if let lastFetched, Date().timeIntervalSince(lastFetched) < cacheLifetime { return }
+        guard !isRefreshing else { return }
+        isRefreshing = true
+
+        let runner = self.runner
+        let loginPath = self.loginPath
+        Task.detached(priority: .utility) {
+            let result = Self.runCcusage(runner: runner, loginPath: loginPath)
+            await MainActor.run { self.apply(result) }
         }
-
-        // A launched-from-Finder app has no terminal to be killed with, so the
-        // timeout is the only thing standing between a wedged ccusage and a
-        // permanently empty usage section.
-        let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        let data = try? pipe.fileHandleForReading.readToEnd()
-        process.waitUntilExit()
-        deadline.cancel()
-
-        guard process.terminationStatus == 0 else {
-            log.debug("\(argv.joined(separator: " "), privacy: .public) exited \(process.terminationStatus)")
-            return nil
-        }
-        return data
     }
 
-    /// A GUI app inherits a bare PATH, so node, bun and Homebrew binaries are
-    /// all invisible. Ask the login shell once for the real one.
-    private func shellPath() -> String {
-        if let loginPath { return loginPath }
-        let fallback = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = ["-lc", "printf %s \"$PATH\""]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return fallback }
-        let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
-        process.waitUntilExit()
-        let path = String(decoding: data, as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        loginPath = path.isEmpty ? fallback : path
-        return loginPath ?? fallback
+    private func apply(_ result: FetchResult) {
+        isRefreshing = false
+        runner = result.runner
+        loginPath = result.loginPath
+
+        guard var fetched = result.snapshot else {
+            // Keep whatever we were showing; only report failure when there is
+            // nothing at all to show.
+            failed = snapshot?.plan == nil && snapshot?.blockCost == nil
+            return
+        }
+        failed = false
+        lastFetched = Date()
+        fetched.plan = snapshot?.plan ?? PlanUsage.read()
+        snapshot = fetched
+        try? JSONEncoder().encode(fetched).write(to: Self.cacheURL, options: .atomic)
+    }
+
+    struct FetchResult: Sendable {
+        var snapshot: UsageSnapshot?
+        var runner: [String]?
+        var loginPath: String?
+    }
+
+    /// Runs off the main actor. Everything below is pure subprocess work.
+    private nonisolated static func runCcusage(runner: [String]?, loginPath: String?) -> FetchResult {
+        let shell = Shell(runner: runner, loginPath: loginPath)
+        guard let blocks = shell.json(["blocks", "--json"]),
+              let daily = shell.json(["daily", "--json"]) else {
+            return FetchResult(snapshot: nil, runner: shell.runner, loginPath: shell.loginPath)
+        }
+        return FetchResult(snapshot: parse(blocks: blocks, daily: daily),
+                           runner: shell.runner, loginPath: shell.loginPath)
     }
 
     // MARK: - Parsing
@@ -213,4 +195,89 @@ private extension ISO8601DateFormatter {
         f.timeZone = .current
         return f
     }()
+}
+
+/// The ccusage subprocess work, deliberately outside the main actor. Holds the
+/// resolved runner and PATH so a refresh hands them back for reuse.
+private final class Shell {
+    /// Resolution order per SPEC §7.
+    static let candidates = [["ccusage"], ["bunx", "ccusage"], ["npx", "-y", "ccusage"]]
+
+    var runner: [String]?
+    var loginPath: String?
+    private let timeout: TimeInterval = 10
+    private let log = Logger(subsystem: "com.appgineering.ampel", category: "usage")
+
+    init(runner: [String]?, loginPath: String?) {
+        self.runner = runner
+        self.loginPath = loginPath
+    }
+
+    func json(_ args: [String]) -> [String: Any]? {
+        for candidate in runner.map({ [$0] }) ?? Shell.candidates {
+            guard let data = run(candidate + args) else { continue }
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log.error("\(candidate.joined(separator: " "), privacy: .public) produced unparseable output")
+                continue
+            }
+            runner = candidate
+            return object
+        }
+        runner = nil
+        return nil
+    }
+
+    func run(_ argv: [String]) -> Data? {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = argv
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = shellPath()
+        process.environment = environment
+
+        do { try process.run() } catch {
+            log.debug("cannot run \(argv.joined(separator: " "), privacy: .public)")
+            return nil
+        }
+
+        // A launched-from-Finder app has no terminal to be killed with, so the
+        // timeout is the only thing standing between a wedged ccusage and a
+        // permanently empty usage section.
+        let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        let data = try? pipe.fileHandleForReading.readToEnd()
+        process.waitUntilExit()
+        deadline.cancel()
+
+        guard process.terminationStatus == 0 else {
+            log.debug("\(argv.joined(separator: " "), privacy: .public) exited \(process.terminationStatus)")
+            return nil
+        }
+        return data
+    }
+
+    /// A GUI app inherits a bare PATH, so node, bun and Homebrew binaries are
+    /// all invisible. Ask the login shell once for the real one.
+    func shellPath() -> String {
+        if let loginPath { return loginPath }
+        let fallback = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-lc", "printf %s \"$PATH\""]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return fallback }
+        let data = (try? pipe.fileHandleForReading.readToEnd()) ?? Data()
+        process.waitUntilExit()
+        let path = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        loginPath = path.isEmpty ? fallback : path
+        return loginPath ?? fallback
+    }
+
 }

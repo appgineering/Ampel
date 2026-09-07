@@ -4,7 +4,7 @@ import SwiftUI
 struct MenuContent: View {
     var store: AmpelStore
     var settings: Settings
-    var provider = UsageProvider()
+    var provider: UsageProvider
 
     var openSettings: () -> Void
     var openAbout: () -> Void
@@ -132,9 +132,11 @@ private struct SessionRow: View {
 private struct UsageSection: View {
     let provider: UsageProvider
     let style: Settings.UsageStyle
-    @State private var usage: UsageSnapshot?
-    @State private var failed = false
 
+    private var usage: UsageSnapshot? { provider.snapshot }
+    private var failed: Bool { provider.failed }
+    /// Only before the very first successful run. Once anything is cached, a
+    /// refresh happens behind the numbers already on screen.
     private var loading: Bool { usage == nil && !failed }
 
     var body: some View {
@@ -143,6 +145,11 @@ private struct UsageSection: View {
                 Text("Usage unavailable. Install it with brew install ccusage")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if style == .text {
+                ForEach(planLines ?? estimateLines, id: \.self) { line in
+                    Text(line).font(.caption)
+                        .redacted(reason: loading ? .placeholder : [])
+                }
             } else if let plan = usage?.plan {
                 // Real limits beat estimates, so they take the space.
                 if let five = plan.fiveHour {
@@ -150,7 +157,8 @@ private struct UsageSection: View {
                              progress: five.usedPercentage / 100,
                              caption: five.resetsAt.map { "resets \($0.formatted(.dateTime.hour().minute()))" },
                              tint: .accentColor,
-                             loading: false)
+                             loading: false,
+                             refreshing: provider.isRefreshing)
                 }
                 if let seven = plan.sevenDay {
                     UsageBar(title: "This week \(UsageProvider.percent(seven.usedPercentage))",
@@ -164,19 +172,13 @@ private struct UsageSection: View {
                              progress: min(spend.usedPercentage / 100, 1),
                              caption: nil, tint: .secondary, loading: false)
                 }
-            } else if style == .text {
-                Text(usage?.currentBlockLine ?? "Current block: $00.00 · 00M tokens")
-                    .font(.caption)
-                    .redacted(reason: loading ? .placeholder : [])
-                Text(usage?.todayLine ?? "Today: $00.00")
-                    .font(.caption)
-                    .redacted(reason: loading ? .placeholder : [])
             } else {
                 UsageBar(title: usage?.blockLabel ?? "Current block: $00.00 · 00M tokens",
                          progress: usage?.blockProgress,
                          caption: resetCaption,
                          tint: .accentColor,
-                         loading: loading)
+                         loading: loading,
+                         refreshing: provider.isRefreshing)
                 UsageBar(title: usage?.todayLine ?? "Today: $00.00",
                          progress: usage?.todayProgress,
                          caption: peakCaption,
@@ -187,22 +189,37 @@ private struct UsageSection: View {
         .foregroundStyle(.secondary)
         // Reserved so the popover does not resize when the numbers land.
         .frame(height: reservedHeight, alignment: .top)
-        .task {
-            // Refreshes every time the menu opens; the provider caches for 60s.
-            let fetched = await provider.fetch()
-            usage = fetched
-            failed = fetched == nil
-        }
+        .task { provider.refresh() }
     }
 
     /// Reserved so the popover does not resize when the numbers land. Plan
     /// usage can show a third bar, so it gets measured rather than guessed.
     private var reservedHeight: CGFloat {
-        if style == .text { return 34 }
+        if style == .text { return CGFloat((planLines ?? estimateLines).count) * 17 }
         let bars = usage?.plan.map { plan in
             [plan.fiveHour, plan.sevenDay, plan.spendLimit].compactMap { $0 }.count
         } ?? 2
         return CGFloat(max(bars, 2)) * 31
+    }
+
+    /// Real plan figures as plain lines, for the numbers-only style.
+    private var planLines: [String]? {
+        guard let plan = usage?.plan else { return nil }
+        var lines: [String] = []
+        if let five = plan.fiveHour {
+            lines.append("Session \(UsageProvider.percent(five.usedPercentage))"
+                + (five.resetsAt.map { ", resets \($0.formatted(.dateTime.hour().minute()))" } ?? ""))
+        }
+        if let seven = plan.sevenDay {
+            lines.append("This week \(UsageProvider.percent(seven.usedPercentage))"
+                + (seven.resetsAt.map { ", resets \($0.formatted(.dateTime.weekday(.abbreviated).hour().minute()))" } ?? ""))
+        }
+        return lines.isEmpty ? nil : lines
+    }
+
+    private var estimateLines: [String] {
+        [usage?.currentBlockLine ?? "Current block: $00.00 · 00M tokens",
+         usage?.todayLine ?? "Today: $00.00"]
     }
 
     private var resetCaption: String? {
@@ -224,6 +241,7 @@ private struct UsageBar: View {
     let caption: String?
     let tint: Color
     let loading: Bool
+    var refreshing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -237,6 +255,10 @@ private struct UsageBar: View {
                 } else if loading {
                     Text("loading").font(.caption2).foregroundStyle(.tertiary)
                         .redacted(reason: .placeholder)
+                }
+                if refreshing {
+                    ProgressView().controlSize(.mini).scaleEffect(0.6)
+                        .frame(width: 10, height: 10)
                 }
             }
             if loading {
