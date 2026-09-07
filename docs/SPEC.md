@@ -109,16 +109,20 @@ Ordering must not use the filename alone: the hook names files with a whole-seco
 - `off` → systemGray, `idle` → systemGreen, `working` → systemYellow, `attention` → systemRed.
 - `attention` only: pulse opacity 1.0 ↔ 0.5, 1s ease-in-out, via timer swapping pre-rendered frames. Zero timer activity in all other states.
 
-Measured cost: swapping the `MenuBarExtra` label image runs a full SwiftUI scene update, about 8ms of CPU per frame, so the pulse costs roughly 0.8% CPU per frame per second (23% at 20fps, 6.6% at 8fps). The frame rate is therefore 8fps. Idle green and gray states run no timer and measure 0.0%.
+The pulse is a repeating `CABasicAnimation` on the status item button's layer, not a timer swapping images. Measured: swapping images cost 23% CPU through `MenuBarExtra` and 10% through `NSStatusItem`, because each swap forces a redraw. Handing the fade to the compositor costs 0.0%, and deleted the pre-rendered frames along with it.
 
 ## 6. Menu UI
 
-`MenuBarExtra` with `.menuBarExtraStyle(.window)`. Content top to bottom:
+An `NSStatusItem` owned by `StatusItemController`, with the menu in an `NSPopover`. `MenuBarExtra` was the original design and could not stay: it offers no right-click hook, and its label re-renders the whole scene. Left and right click both open the popover; a separate right-click menu was built and removed as two surfaces for one icon.
+
+The popover's hosting controller is rebuilt on every open. Kept alive across opens, each `.task` runs once for the life of the app, so anything changed in settings afterwards never took effect.
+
+Content top to bottom:
 
 1. Header: aggregate summary ("1 session needs attention" / "2 sessions working" / "All quiet").
 2. Session rows: colored dot, project name, state label, relative time ("2m ago"). `attention` sessions sorted first; show `lastMessage` as secondary line when present.
 3. Divider, usage section (§7).
-4. Footer: "Launch at Login" toggle (`SMAppService.mainApp`), "Install hooks…" (only when setup incomplete, §8), "Quit".
+4. Footer: "Settings…", "About", "Quit". "Install hooks…" appears above them only when setup is incomplete (§8). Launch at Login and the display preferences live in the settings window, not the popover.
 
 macOS notification (`UNUserNotificationCenter`) when a session transitions INTO `attention`: title = project name, body = payload `message` or "Claude needs your attention". Debounce: max one per session per 30s. No notifications for any other transition.
 
@@ -159,3 +163,11 @@ Ampel/
 
 - The `Notification` hook fires on permission prompts and after ~60s idle waiting for input. It is known to be unreliable in some IDE-extension environments; the terminal CLI is the reference environment.
 - ccusage numbers are estimates derived from local transcripts, not an official API.
+
+## 11. Plan usage
+
+ccusage reports an estimated dollar cost derived from local transcripts. On a Max plan that is notional, and it never matches what `/usage` shows, which is percentage of rate limit. The real numbers reach the machine one way only: Claude Code passes `rate_limits` on the statusLine hook's stdin, carrying `five_hour` and `seven_day` (and `spend_limit` behind a gateway), each with `used_percentage` and `resets_at`. There is no per-model breakdown, so the per-model figures on the /usage screen cannot be reproduced.
+
+`statusLine` holds a single command, so `StatuslineInstaller` saves the existing one to `~/.ampel/statusline-inner` and installs a wrapper that stores the payload at `~/.ampel/usage.json` and then runs the original, passing its output through. With no previous statusline it prints a compact usage line of its own rather than leaving an empty row. Turning the setting off restores the original command.
+
+This is off by default and opt-in from settings, because it is the one part of Ampel that takes over a config the user may already be using.

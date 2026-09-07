@@ -42,10 +42,14 @@ final class HookInstaller {
         }
     }
 
-    func install() throws {
+    /// Returns the backup that was made, or nil when there was no settings
+    /// file to lose, so the menu can say what actually happened.
+    @discardableResult
+    func install() throws -> URL? {
         try writeScript()
-        try mergeSettings()
+        let backup = try mergeSettings()
         log.info("hooks installed")
+        return backup
     }
 
     // MARK: - Script
@@ -82,10 +86,11 @@ final class HookInstaller {
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
-    private func mergeSettings() throws {
+    private func mergeSettings() throws -> URL? {
         guard var settings = readSettings() else {
             throw InstallError.unreadableSettings
         }
+        var madeBackup: URL?
 
         // Back up before touching anything, and only if there is something to lose.
         if FileManager.default.fileExists(atPath: settingsURL.path) {
@@ -97,6 +102,7 @@ final class HookInstaller {
                 try FileManager.default.copyItem(at: settingsURL, to: backup)
                 log.info("backed up settings to \(backup.lastPathComponent, privacy: .public)")
             }
+            madeBackup = backup
         }
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
@@ -120,6 +126,7 @@ final class HookInstaller {
         try FileManager.default.createDirectory(
             at: settingsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: settingsURL, options: .atomic)
+        return madeBackup
     }
 
     enum InstallError: LocalizedError {

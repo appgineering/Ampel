@@ -7,12 +7,13 @@ macOS menu bar app showing Claude Code session status as a traffic light. Read `
 1. Execute `docs/MILESTONES.md` strictly in order. Do not start a milestone until the previous one's acceptance criteria pass. Verify them yourself where possible (build, run scripts, inspect files) and tell the user exactly what to check manually.
 2. When the spec and reality disagree (API renamed, hook payload differs), follow reality, then update `docs/SPEC.md` in the same commit and note the deviation.
 3. Never modify `~/.claude/settings.json` destructively. Always merge and always write a timestamped backup first (`settings.json.bak-<epoch>`).
-4. Hook scripts must always `exit 0` and must never write to stdout/stderr in the success path. Ampel must be invisible to Claude Code's own hook semantics.
+4. Hook scripts must always `exit 0` and must never write to stdout/stderr in the success path. Ampel must be invisible to Claude Code's own hook semantics. The statusLine wrapper is the one exception: it is opt-in, and it prints only what the statusline it replaced would have printed.
 5. Commit per milestone, conventional commits (`feat:`, `fix:`, `chore:`), imperative subject.
 
 ## Tech constraints (non-negotiable)
 
-- Swift 5.10+, SwiftUI, `MenuBarExtra`, deployment target macOS 14.0.
+- Swift 5.10+, SwiftUI, deployment target macOS 14.0.
+- The menu bar item is an `NSStatusItem` owned by `StatusItemController`, not `MenuBarExtra`. `MenuBarExtra` exposes no right-click and re-renders its whole scene on every label change, which cost 23% CPU for the attention pulse. All content is still SwiftUI, hosted in an `NSPopover` and two plain `NSWindow`s.
 - The Xcode project is generated from `project.yml` via XcodeGen. Never hand-edit the `.pbxproj`; change `project.yml` and run `xcodegen generate`. New source files under `Ampel/` are picked up automatically on regeneration.
 - App bundle `Ampel.app`, bundle id `com.appgineering.ampel`.
 - `LSUIElement = true` — no Dock icon, no main window.

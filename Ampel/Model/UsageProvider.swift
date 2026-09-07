@@ -3,8 +3,41 @@ import os
 
 /// Shells out to ccusage for the usage section. See SPEC §7.
 struct UsageSnapshot {
-    var currentBlockLine: String   // "Current block: $X.XX · N tokens · resets HH:MM"
-    var todayLine: String          // "Today: $Y.YY"
+    var blockCost: Double?
+    var blockTokens: Int?
+    /// How far through the rate limit window we are, 0...1. The window has a
+    /// fixed length, which is the only denominator here that is not invented.
+    var blockProgress: Double?
+    var blockResets: Date?
+    var todayCost: Double
+    /// Real plan limits when Claude Code is feeding them to us.
+    var plan: PlanUsage?
+
+    /// The busiest of the last seven days, used to scale today's bar. Recent
+    /// rather than all time: an outlier from months ago makes every normal day
+    /// look like nothing.
+    var todayPeak: Double?
+
+    /// Without the reset time, which the bar shows as its own caption.
+    var blockLabel: String {
+        guard let blockCost else { return "Current block: idle" }
+        var parts = ["Current block: \(UsageProvider.money(blockCost))"]
+        if let blockTokens { parts.append("\(UsageProvider.compact(blockTokens)) tokens") }
+        return parts.joined(separator: " · ")
+    }
+
+    var currentBlockLine: String {
+        guard let blockResets else { return blockLabel }
+        return blockLabel + " · resets \(blockResets.formatted(.dateTime.hour().minute()))"
+    }
+
+    var todayLine: String { "Today: \(UsageProvider.money(todayCost))" }
+
+    /// Today measured against the busiest day ccusage knows about.
+    var todayProgress: Double? {
+        guard let todayPeak, todayPeak > 0 else { return nil }
+        return min(todayCost / todayPeak, 1)
+    }
 }
 
 /// Resolution order: `ccusage` on PATH, then `bunx ccusage`, then `npx -y ccusage`.
@@ -24,16 +57,23 @@ actor UsageProvider {
     private static let candidates = [["ccusage"], ["bunx", "ccusage"], ["npx", "-y", "ccusage"]]
 
     func fetch() async -> UsageSnapshot? {
+        // Plan usage is a local file write by Claude Code, so it is always
+        // read fresh; only the ccusage subprocesses are worth caching.
+        let plan = PlanUsage.read()
         if let cached, let cachedAt, Date().timeIntervalSince(cachedAt) < cacheLifetime {
-            return cached
+            var snapshot = cached
+            snapshot.plan = plan
+            return snapshot
         }
         guard let blocks = json(["blocks", "--json"]), let daily = json(["daily", "--json"]) else {
-            return nil
+            // Plan usage alone is still worth showing.
+            return plan.map { UsageSnapshot(todayCost: 0, plan: $0) }
         }
-        guard let snapshot = Self.parse(blocks: blocks, daily: daily) else {
+        guard var snapshot = Self.parse(blocks: blocks, daily: daily) else {
             log.error("ccusage ran but its output did not parse")
             return nil
         }
+        snapshot.plan = plan
         cached = snapshot
         cachedAt = Date()
         return snapshot
@@ -117,42 +157,46 @@ actor UsageProvider {
         let blockRows = blocks["blocks"] as? [[String: Any]] ?? []
         let active = blockRows.first { $0["isActive"] as? Bool == true }
 
-        let blockLine: String
-        if let active {
-            let cost = active["costUSD"] as? Double ?? 0
-            let tokens = active["totalTokens"] as? Int ?? 0
-            var parts = ["Current block: \(money(cost))", "\(compact(tokens)) tokens"]
-            if let resets = active["endTime"] as? String, let time = clockTime(resets) {
-                parts.append("resets \(time)")
-            }
-            blockLine = parts.joined(separator: " · ")
-        } else {
-            blockLine = "Current block: idle"
+        let resets = (active?["endTime"] as? String).flatMap(date(from:))
+        let started = (active?["startTime"] as? String).flatMap(date(from:))
+        var progress: Double?
+        if let started, let resets, resets > started {
+            let span = resets.timeIntervalSince(started)
+            progress = min(max(Date().timeIntervalSince(started) / span, 0), 1)
         }
 
-        let today = ISO8601DateFormatter.day.string(from: Date())
         let dailyRows = daily["daily"] as? [[String: Any]] ?? []
-        let cost = dailyRows.first { $0["period"] as? String == today }?["totalCost"] as? Double
-        return UsageSnapshot(currentBlockLine: blockLine, todayLine: "Today: \(money(cost ?? 0))")
+        let today = ISO8601DateFormatter.day.string(from: Date())
+        let todayCost = dailyRows.first { $0["period"] as? String == today }?["totalCost"] as? Double ?? 0
+        let peak = dailyRows.suffix(7).compactMap { $0["totalCost"] as? Double }.max()
+
+        return UsageSnapshot(
+            blockCost: active?["costUSD"] as? Double,
+            blockTokens: active?["totalTokens"] as? Int,
+            blockProgress: progress,
+            blockResets: resets,
+            todayCost: todayCost,
+            todayPeak: peak)
     }
 
-    /// ccusage reports US dollars. Formatting these in the user's locale gives
-    /// "9,54 US$" on a German Mac, so the money and token formats are pinned.
+    nonisolated static func date(from iso: String) -> Date? {
+        ISO8601DateFormatter.fractional.date(from: iso) ?? ISO8601DateFormatter.plain.date(from: iso)
+    }
+
     private nonisolated static let en = Locale(identifier: "en_US")
 
-    private nonisolated static func money(_ value: Double) -> String {
+    nonisolated static func money(_ value: Double) -> String {
         value.formatted(.currency(code: "USD").precision(.fractionLength(2)).locale(en))
     }
 
-    private nonisolated static func compact(_ value: Int) -> String {
+    nonisolated static func percent(_ value: Double) -> String {
+        (value / 100).formatted(.percent.precision(.fractionLength(0)).locale(en))
+    }
+
+    nonisolated static func compact(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(en))
     }
 
-    private nonisolated static func clockTime(_ iso: String) -> String? {
-        guard let date = ISO8601DateFormatter.fractional.date(from: iso)
-            ?? ISO8601DateFormatter.plain.date(from: iso) else { return nil }
-        return date.formatted(.dateTime.hour().minute())
-    }
 }
 
 private extension ISO8601DateFormatter {
