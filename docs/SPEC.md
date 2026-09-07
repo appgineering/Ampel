@@ -37,17 +37,19 @@ Write-then-rename prevents the watcher from reading half-written files. Always e
 ```json
 {
   "hooks": {
-    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SessionStart" }] }],
+    "SessionStart":     [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SessionStart" }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook UserPromptSubmit" }] }],
-    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook PreToolUse" }] }],
-    "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook PostToolUse" }] }],
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook Notification" }] }],
+    "PreToolUse":       [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook PreToolUse" }] }],
+    "PostToolUse":      [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook PostToolUse" }] }],
+    "Notification":     [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook Notification" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook Stop" }] }],
-    "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SubagentStop" }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SessionEnd" }] }]
+    "SubagentStop":     [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SubagentStop" }] }],
+    "SessionEnd":       [{ "matcher": "*", "hooks": [{ "type": "command", "command": "~/.ampel/bin/ampel-hook SessionEnd" }] }]
   }
 }
 ```
+
+`UserPromptSubmit` and `Stop` do not support a matcher (one is silently ignored there); every other event we use does, and `"*"` means match all. Each event's value is an array of matcher groups, so installing means appending a group, never replacing the array.
 
 ### 2.3 Envelope format
 
@@ -80,6 +82,8 @@ Transition table, keyed by `session_id`:
 | `Stop` / `SubagentStop` | `idle` |
 | `SessionEnd` | remove session |
 
+The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …). Only `message` is used; `notification_type` is a documented hook field kept in reserve if the two cases ever need to be distinguished.
+
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 
 Aggregate for the icon: `attention > working > idle`; `off` when no sessions.
@@ -88,7 +92,9 @@ Housekeeping: 60s timer removes sessions with `lastActivity` older than 6 hours 
 
 ## 4. Event watcher
 
-`DispatchSource.makeFileSystemObjectSource` on an `O_EVTONLY` file descriptor of `~/.ampel/events`, event mask `.write`. On every fire AND once on app launch: drain the spool — list `*.json` (skip `.tmp-*`), sort by filename ascending, decode, apply, delete. Malformed files: delete and log, never crash. Draining on launch replays everything that happened while the app was closed.
+`DispatchSource.makeFileSystemObjectSource` on an `O_EVTONLY` file descriptor of `~/.ampel/events`, event mask `.write`. On every fire AND once on app launch: drain the spool — list `*.json` (skip `.tmp-*`), sort by modification time ascending with the filename as tiebreak, decode, apply, delete.
+
+Ordering must not use the filename alone: the hook names files with a whole-second `date +%s`, and several events landing in the same second is routine (observed within a single three-minute session). Two events out of order can leave the icon stuck on the wrong colour until the next event. APFS mtimes are nanosecond-resolution and `mv` preserves the tmp file's write time, so mtime is the correct ordering key and the hook script needs no sub-second clock (macOS ships bash 3.2, which has neither `EPOCHREALTIME` nor a `%N` in BSD `date`). Malformed files: delete and log, never crash. Draining on launch replays everything that happened while the app was closed.
 
 ## 5. Menu bar icon
 
