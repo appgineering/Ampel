@@ -7,6 +7,19 @@ options:
   xcodeVersion: "16.0"
 
 targets:
+  AmpelTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    dependencies:
+      - target: Ampel
+    settings:
+      base:
+        SWIFT_VERSION: "5.10"
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_STRICT_CONCURRENCY: complete
+
   Ampel:
     type: application
     platform: macOS

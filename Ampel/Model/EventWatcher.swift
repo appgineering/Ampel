@@ -14,17 +14,21 @@ final class EventWatcher: @unchecked Sendable {
     private var source: DispatchSourceFileSystemObject?
     private var descriptor: CInt = -1
 
-    static var eventsDirectory: URL {
+    static var defaultEventsDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".ampel/events", isDirectory: true)
     }
 
-    init(store: AmpelStore) {
+    /// Injectable so tests can drain a throwaway spool.
+    private let eventsDirectory: URL
+
+    init(store: AmpelStore, eventsDirectory: URL = EventWatcher.defaultEventsDirectory) {
         self.store = store
+        self.eventsDirectory = eventsDirectory
     }
 
     func start() {
-        let dir = Self.eventsDirectory
+        let dir = eventsDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         queue.async { [weak self] in self?.drain() }
@@ -48,7 +52,7 @@ final class EventWatcher: @unchecked Sendable {
     func drain() {
         let fm = FileManager.default
         let urls = (try? fm.contentsOfDirectory(
-            at: Self.eventsDirectory,
+            at: eventsDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: .skipsHiddenFiles)) ?? []
 

@@ -23,6 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var observation: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The test bundle loads this app as its host. Building a status item,
+        // installing a watcher and opening onboarding during tests would be
+        // both noisy and destructive.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+
         let controller = StatusItemController(store: store, settings: settings)
         self.controller = controller
 
