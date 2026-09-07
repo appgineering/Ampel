@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuContent: View {
     var store: AmpelStore
+    var provider = UsageProvider()
 
     /// Project names shared by more than one live session. Those rows get a
     /// short session id so parallel sessions in one repo stay tellable apart.
@@ -38,7 +39,9 @@ struct MenuContent: View {
                 }
             }
 
-            // TODO(M4): usage section fed by UsageProvider.
+            Divider()
+
+            UsageSection(provider: provider)
 
             Divider()
 
@@ -107,5 +110,31 @@ private struct LaunchAtLoginToggle: View {
                     enabled = SMAppService.mainApp.status == .enabled
                 }
             }
+    }
+}
+
+private struct UsageSection: View {
+    let provider: UsageProvider
+    @State private var usage: UsageSnapshot?
+    @State private var loaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let usage {
+                Text(usage.currentBlockLine)
+                Text(usage.todayLine)
+            } else if loaded {
+                Text("Usage unavailable. Install it with brew install ccusage")
+            } else {
+                Text("Loading usage…")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .task {
+            // Refreshes every time the menu opens; the provider caches for 60s.
+            usage = await provider.fetch()
+            loaded = true
+        }
     }
 }

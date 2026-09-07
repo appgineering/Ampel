@@ -124,8 +124,12 @@ macOS notification (`UNUserNotificationCenter`) when a session transitions INTO 
 
 `UsageProvider` refreshes when the menu opens, caches 60s, runs off the main thread via `Process` with 10s timeout:
 
-- `ccusage blocks --json` → active block → cost, tokens, block end time → "Current block: $X.XX · N tokens · resets HH:MM"
-- `ccusage daily --json` → today → "Today: $Y.YY"
+- `ccusage blocks --json` → the row with `isActive` → `costUSD`, `totalTokens`, `endTime` → "Current block: $X.XX · N tokens · resets HH:MM"
+- `ccusage daily --json` → the `daily` row whose `period` is today's local date → `totalCost` → "Today: $Y.YY"
+
+Field names are as ccusage actually emits them (verified against 20.0.20): blocks carry `costUSD` and `totalTokens`, daily rows are keyed by `period`, not `date`, and carry `totalCost`. Money and token counts are formatted with a pinned `en_US` locale, because ccusage reports US dollars and the user locale otherwise renders them as "9,54 US$". Token counts use compact notation ("14.1M") to fit the 300pt menu.
+
+A GUI app launched from Finder inherits a bare `PATH` with no Homebrew, bun or node in it, so none of the three candidates are reachable by default. The provider therefore asks the login shell (`$SHELL -lc`) for the real `PATH` once, caches it, and runs candidates with it. It also caches which candidate worked so later refreshes stop paying for probing.
 
 Binary resolution order: `ccusage` on PATH (via `/usr/bin/env`), then `bunx ccusage`, then `npx -y ccusage`. On any failure: render "Usage unavailable — brew install ccusage" and log; never block or crash the menu.
 
