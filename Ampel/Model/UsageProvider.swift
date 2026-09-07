@@ -181,20 +181,25 @@ final class UsageProvider {
 
 }
 
+/// Fresh instances rather than shared ones: parsing runs off the main actor,
+/// and ISO8601DateFormatter is not safe to share across threads. A handful of
+/// allocations per refresh is not worth a lock.
 private extension ISO8601DateFormatter {
-    static let fractional: ISO8601DateFormatter = {
+    static var fractional: ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
-    }()
-    static let plain = ISO8601DateFormatter()
+    }
+
+    static var plain: ISO8601DateFormatter { ISO8601DateFormatter() }
+
     /// ccusage keys daily rows by local calendar day.
-    static let day: ISO8601DateFormatter = {
+    static var day: ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withFullDate]
         f.timeZone = .current
         return f
-    }()
+    }
 }
 
 /// The ccusage subprocess work, deliberately outside the main actor. Holds the

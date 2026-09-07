@@ -24,6 +24,8 @@ import Foundation
 
         try freshMachine(root.appendingPathComponent("fresh"))
         try existingSettings(root.appendingPathComponent("existing"))
+        try deletedAmpelFolder(root.appendingPathComponent("deleted"))
+        try statuslineSurvivesDeletion(root.appendingPathComponent("statusline"))
         print("InstallCheck: all assertions passed")
     }
 
@@ -48,6 +50,50 @@ import Foundation
         for event in HookInstaller.events {
             assert(ampelGroups(settings, event).count == 1, "missing hook for \(event)")
         }
+    }
+
+    /// `rm -rf ~/.ampel` with the hooks still registered. Every hook then calls
+    /// a script that is gone, so Ampel sees nothing and says nothing.
+    static func deletedAmpelFolder(_ home: URL) throws {
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let installer = HookInstaller(home: home)
+        try installer.install()
+        assert(installer.isInstalled)
+
+        try FileManager.default.removeItem(at: home.appendingPathComponent(".ampel"))
+        assert(installer.isInstalled == false, "a missing script is not installed")
+
+        installer.repairIfNeeded()
+        assert(installer.isInstalled, "launch must put the hook script back")
+    }
+
+    /// The same for the statusline wrapper, which additionally must not lose
+    /// the command it chains to, since that is the user's real statusline.
+    static func statuslineSurvivesDeletion(_ home: URL) throws {
+        let claude = home.appendingPathComponent(".claude")
+        try FileManager.default.createDirectory(at: claude, withIntermediateDirectories: true)
+        try #"{"statusLine":{"type":"command","command":"/usr/local/bin/my-statusline"}}"#
+            .write(to: claude.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+
+        let defaults = UserDefaults(suiteName: "ampel-installcheck-\(UUID().uuidString)")!
+        let installer = StatuslineInstaller(home: home, defaults: defaults)
+        try installer.install()
+        assert(installer.isInstalled)
+
+        try FileManager.default.removeItem(at: home.appendingPathComponent(".ampel"))
+        assert(installer.isInstalled == false, "pointer alone must not count as installed")
+
+        installer.repairIfNeeded()
+        assert(installer.isInstalled, "launch must put the wrapper back")
+        let inner = try String(contentsOf: home.appendingPathComponent(".ampel/statusline-inner"),
+                               encoding: .utf8)
+        assert(inner == "/usr/local/bin/my-statusline", "chained statusline lost: \(inner)")
+
+        // And turning it off still restores what was there before.
+        try installer.uninstall()
+        let settings = dict(claude.appendingPathComponent("settings.json"))
+        let command = (settings["statusLine"] as? [String: Any])?["command"] as? String
+        assert(command == "/usr/local/bin/my-statusline", "uninstall must restore the original")
     }
 
     /// An existing settings.json with unrelated settings and a foreign hook on

@@ -42,6 +42,26 @@ final class HookInstaller {
         }
     }
 
+    /// settings.json outlives ~/.ampel. If the hooks are still registered but
+    /// the script they call is gone, every hook silently fails and Ampel goes
+    /// blind, so put the script back rather than waiting to be asked.
+    func repairIfNeeded() {
+        guard !FileManager.default.isExecutableFile(atPath: scriptURL.path), hooksRegistered else { return }
+        try? writeScript()
+        log.info("restored a missing hook script")
+    }
+
+    private var hooksRegistered: Bool {
+        guard let settings = readSettings() else { return false }
+        let hooks = settings["hooks"] as? [String: Any] ?? [:]
+        return Self.events.allSatisfy { event in
+            (hooks[event] as? [[String: Any]] ?? []).contains { group in
+                (group["hooks"] as? [[String: Any]] ?? [])
+                    .contains { $0["command"] as? String == command(for: event) }
+            }
+        }
+    }
+
     /// Returns the backup that was made, or nil when there was no settings
     /// file to lose, so the menu can say what actually happened.
     @discardableResult

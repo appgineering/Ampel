@@ -32,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notifier.notify(session)
         }
 
+        // Deleting ~/.ampel leaves settings.json pointing at scripts that are
+        // gone. Put them back before anything else runs.
+        HookInstaller().repairIfNeeded()
+        StatuslineInstaller().repairIfNeeded()
+
         observeAggregate()
 
         let watcher = EventWatcher(store: store)

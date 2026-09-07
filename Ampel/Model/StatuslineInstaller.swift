@@ -8,17 +8,51 @@ final class StatuslineInstaller {
     private let log = Logger(subsystem: "com.appgineering.ampel", category: "installer")
 
     private let home: URL
-    init(home: URL = FileManager.default.homeDirectoryForCurrentUser) { self.home = home }
+    private let defaults: UserDefaults
+    private static let innerKey = "statuslineInnerCommand"
+
+    init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
+         defaults: UserDefaults = .standard) {
+        self.home = home
+        self.defaults = defaults
+    }
 
     private var wrapperURL: URL { home.appendingPathComponent(".ampel/bin/ampel-statusline") }
     private var innerURL: URL { home.appendingPathComponent(".ampel/statusline-inner") }
     private var settingsURL: URL { home.appendingPathComponent(".claude/settings.json") }
 
+    /// Both halves must hold. Checking only the settings pointer reported
+    /// installed after `rm -rf ~/.ampel` took the script with it, leaving the
+    /// toggle on while Claude Code ran a command that no longer existed.
     var isInstalled: Bool {
+        pointsAtWrapper && FileManager.default.isExecutableFile(atPath: wrapperURL.path)
+    }
+
+    private var pointsAtWrapper: Bool {
         guard let settings = readSettings(),
               let line = settings["statusLine"] as? [String: Any],
               let command = line["command"] as? String else { return false }
         return command == wrapperURL.path
+    }
+
+    /// `~/.ampel` is disposable by design, but settings.json is not: deleting
+    /// the folder leaves Claude Code pointing at a missing script, which breaks
+    /// the user's statusline entirely. Restore both from what we kept outside.
+    func repairIfNeeded() {
+        guard pointsAtWrapper else { return }
+
+        if !FileManager.default.isExecutableFile(atPath: wrapperURL.path) {
+            try? writeWrapper()
+            log.info("restored a missing statusline wrapper")
+        }
+        // The chained command lives in UserDefaults too, so it survives the
+        // folder being deleted. Without it the previous statusline is simply
+        // gone, with nothing left to say what it was.
+        let inner = (try? String(contentsOf: innerURL, encoding: .utf8)) ?? ""
+        if inner.isEmpty, let remembered = defaults.string(forKey: Self.innerKey), !remembered.isEmpty {
+            try? remembered.write(to: innerURL, atomically: true, encoding: .utf8)
+            log.info("restored the chained statusline command")
+        }
     }
 
     func install() throws {
@@ -27,10 +61,17 @@ final class StatuslineInstaller {
         let existing = (settings["statusLine"] as? [String: Any])?["command"] as? String
 
         // Save whatever was there so it keeps running and can be restored.
+        // Kept in UserDefaults as well, which outlives ~/.ampel.
         if let existing, existing != wrapperURL.path {
             try existing.write(to: innerURL, atomically: true, encoding: .utf8)
+            defaults.set(existing, forKey: Self.innerKey)
         } else if existing == nil {
             try? FileManager.default.removeItem(at: innerURL)
+            defaults.removeObject(forKey: Self.innerKey)
+        } else {
+            // Re-installing over ourselves. The chained command must not be
+            // lost just because the folder was deleted in between.
+            repairIfNeeded()
         }
 
         settings["statusLine"] = ["type": "command", "command": wrapperURL.path]
@@ -40,7 +81,8 @@ final class StatuslineInstaller {
 
     func uninstall() throws {
         var settings = readSettings() ?? [:]
-        let inner = try? String(contentsOf: innerURL, encoding: .utf8)
+        let inner = (try? String(contentsOf: innerURL, encoding: .utf8))
+            ?? defaults.string(forKey: Self.innerKey)
         if let inner, !inner.isEmpty {
             settings["statusLine"] = ["type": "command", "command": inner]
         } else {
@@ -48,12 +90,13 @@ final class StatuslineInstaller {
         }
         try write(settings)
         try? FileManager.default.removeItem(at: PlanUsage.fileURL)
+        defaults.removeObject(forKey: Self.innerKey)
         log.info("statusline wrapper removed")
     }
 
     // MARK: - Files
 
-    private func writeWrapper() throws {
+    func writeWrapper() throws {
         try FileManager.default.createDirectory(
             at: wrapperURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Self.wrapper.write(to: wrapperURL, atomically: true, encoding: .utf8)

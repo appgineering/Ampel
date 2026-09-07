@@ -10,5 +10,5 @@ build Ampel/Model/SessionState.swift Ampel/Model/AmpelStore.swift Tests/StoreChe
 build Ampel/Model/UsageProvider.swift Ampel/Model/PlanUsage.swift Tests/UsageCheck.swift -o "$out/usagecheck"
 "$out/usagecheck"
 
-build Ampel/Model/HookInstaller.swift Tests/InstallCheck.swift -o "$out/installcheck"
+build Ampel/Model/HookInstaller.swift Ampel/Model/StatuslineInstaller.swift Ampel/Model/PlanUsage.swift Tests/InstallCheck.swift -o "$out/installcheck"
 "$out/installcheck"
