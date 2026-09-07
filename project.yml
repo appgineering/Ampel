@@ -16,8 +16,8 @@ targets:
       path: Ampel/Info.plist
       properties:
         CFBundleDisplayName: Ampel
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.1"
+        CFBundleVersion: "3"
         LSUIElement: true
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "© 2026 Appgineering GbR"

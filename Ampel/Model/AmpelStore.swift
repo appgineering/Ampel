@@ -14,7 +14,7 @@ final class AmpelStore {
     var onAttention: ((Session) -> Void)?
 
     @ObservationIgnored
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "store")
+    private let log = Log("store")
 
     var aggregate: AggregateState {
         if sessions.isEmpty { return .off }
@@ -45,12 +45,12 @@ final class AmpelStore {
     /// SPEC §3 transition table. Unknown events are logged and ignored.
     func apply(_ envelope: HookEnvelope) {
         guard let id = envelope.payload.sessionId else {
-            log.debug("event \(envelope.event, privacy: .public) without session_id, ignored")
+            log.debug("event \(envelope.event) without session_id, ignored")
             return
         }
 
         if envelope.event == "SessionEnd" {
-            log.info("\(id, privacy: .public) SessionEnd, removing")
+            log.info("\(id) SessionEnd, removing")
             sessions.removeValue(forKey: id)
             return
         }
@@ -69,7 +69,7 @@ final class AmpelStore {
             }
             activity = .attention
         default:
-            log.info("unknown event \(envelope.event, privacy: .public), ignored")
+            log.info("unknown event \(envelope.event), ignored")
             return
         }
 
@@ -83,7 +83,7 @@ final class AmpelStore {
         session.lastMessage = activity == .attention ? envelope.payload.message : nil
         sessions[id] = session
 
-        log.info("\(id, privacy: .public) \(envelope.event, privacy: .public) -> \(String(describing: activity), privacy: .public) (\(self.sessions.count, privacy: .public) live)")
+        log.info("\(id) \(envelope.event) -> \(String(describing: activity)) (\(self.sessions.count) live)")
 
         if activity == .attention && previous?.activity != .attention {
             onAttention?(session)
@@ -102,7 +102,7 @@ final class AmpelStore {
         let cutoff = Date().addingTimeInterval(-interval)
         let dead = sessions.filter { $0.value.lastActivity < cutoff }.keys
         for id in dead {
-            log.info("sweeping stale session \(id, privacy: .public)")
+            log.info("sweeping stale session \(id)")
             sessions.removeValue(forKey: id)
         }
     }

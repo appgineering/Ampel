@@ -53,7 +53,7 @@ final class UsageProvider {
     private(set) var isRefreshing = false
     private(set) var failed = false
 
-    @ObservationIgnored private let log = Logger(subsystem: "com.appgineering.ampel", category: "usage")
+    @ObservationIgnored private let log = Log("usage")
     @ObservationIgnored private let cacheLifetime: TimeInterval = 60
     @ObservationIgnored private var lastFetched: Date?
     /// The argv prefix that last worked, so we stop paying for probing.
@@ -211,7 +211,7 @@ private final class Shell {
     var runner: [String]?
     var loginPath: String?
     private let timeout: TimeInterval = 10
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "usage")
+    private let log = Log("usage")
 
     init(runner: [String]?, loginPath: String?) {
         self.runner = runner
@@ -222,7 +222,7 @@ private final class Shell {
         for candidate in runner.map({ [$0] }) ?? Shell.candidates {
             guard let data = run(candidate + args) else { continue }
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                log.error("\(candidate.joined(separator: " "), privacy: .public) produced unparseable output")
+                log.error("\(candidate.joined(separator: " ")) produced unparseable output")
                 continue
             }
             runner = candidate
@@ -244,7 +244,7 @@ private final class Shell {
         process.environment = environment
 
         do { try process.run() } catch {
-            log.debug("cannot run \(argv.joined(separator: " "), privacy: .public)")
+            log.debug("cannot run \(argv.joined(separator: " "))")
             return nil
         }
 
@@ -258,7 +258,7 @@ private final class Shell {
         deadline.cancel()
 
         guard process.terminationStatus == 0 else {
-            log.debug("\(argv.joined(separator: " "), privacy: .public) exited \(process.terminationStatus)")
+            log.debug("\(argv.joined(separator: " ")) exited \(process.terminationStatus)")
             return nil
         }
         return data

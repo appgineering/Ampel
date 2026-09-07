@@ -8,7 +8,7 @@ import os
 /// script, MERGE the hooks block — preserve unrelated settings and append to
 /// (never replace) existing hooks on the same events.
 final class HookInstaller {
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "installer")
+    private let log = Log("installer")
 
     /// Events Ampel listens to. `UserPromptSubmit` and `Stop` take no matcher.
     static let events = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
@@ -120,7 +120,7 @@ final class HookInstaller {
             // backup: it is the one closer to the untouched original.
             if !FileManager.default.fileExists(atPath: backup.path) {
                 try FileManager.default.copyItem(at: settingsURL, to: backup)
-                log.info("backed up settings to \(backup.lastPathComponent, privacy: .public)")
+                log.info("backed up settings to \(backup.lastPathComponent)")
             }
             madeBackup = backup
         }

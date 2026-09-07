@@ -3,6 +3,8 @@ import SwiftUI
 struct AboutView: View {
     var showSetupGuide: (() -> Void)?
 
+    @State private var copied = false
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "0"
@@ -37,6 +39,24 @@ struct AboutView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Diagnostics").font(.caption).fontWeight(.medium)
+                Text("If something misbehaves, copy this and include it in the report. It lists the version, whether setup completed, what is in ~/.ampel, and the tail of the log.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button(copied ? "Copied" : "Copy diagnostics") {
+                        Diagnostics.copyToClipboard()
+                        copied = true
+                    }
+                    Button("Show log file") { Diagnostics.revealLog() }
+                }
+                .controlSize(.small)
             }
 
             if let showSetupGuide {

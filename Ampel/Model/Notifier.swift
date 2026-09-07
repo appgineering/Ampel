@@ -6,13 +6,13 @@ import os
 /// per session per 30 seconds. See SPEC §6. Nothing else notifies.
 @MainActor
 final class Notifier {
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "ui")
+    private let log = Log("ui")
     private let debounce: TimeInterval = 30
     private var lastSent: [String: Date] = [:]
 
     func requestAuthorization() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
-            if let error { self.log.error("notification authorization failed: \(error.localizedDescription, privacy: .public)") }
+            if let error { self.log.error("notification authorization failed: \(error.localizedDescription)") }
             else if !granted { self.log.info("notification authorization denied") }
         }
     }
@@ -28,7 +28,7 @@ final class Notifier {
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
-            if let error { self.log.error("notification failed: \(error.localizedDescription, privacy: .public)") }
+            if let error { self.log.error("notification failed: \(error.localizedDescription)") }
         }
     }
 }

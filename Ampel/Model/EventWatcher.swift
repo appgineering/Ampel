@@ -9,7 +9,7 @@ import os
 /// only by the cancel handler, and draining happens exclusively on `queue`.
 final class EventWatcher: @unchecked Sendable {
     private let store: AmpelStore
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "watcher")
+    private let log = Log("watcher")
     private let queue = DispatchQueue(label: "com.appgineering.ampel.watcher")
     private var source: DispatchSourceFileSystemObject?
     private var descriptor: CInt = -1
@@ -31,7 +31,7 @@ final class EventWatcher: @unchecked Sendable {
 
         descriptor = open(dir.path, O_EVTONLY)
         guard descriptor >= 0 else {
-            log.error("cannot open \(dir.path, privacy: .public) for watching")
+            log.error("cannot open \(dir.path) for watching")
             return
         }
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -65,15 +65,25 @@ final class EventWatcher: @unchecked Sendable {
             return a.url.lastPathComponent < b.url.lastPathComponent
         }
 
+        var collected: [HookEnvelope] = []
         for (url, _) in ordered {
             defer { try? fm.removeItem(at: url) }
             guard let data = try? Data(contentsOf: url),
                   let envelope = try? JSONDecoder().decode(HookEnvelope.self, from: data) else {
-                log.error("dropping malformed spool file \(url.lastPathComponent, privacy: .public)")
+                log.error("dropping malformed spool file \(url.lastPathComponent)")
                 continue
             }
-            DispatchQueue.main.async { [store] in
-                MainActor.assumeIsolated { store.apply(envelope) }
+            collected.append(envelope)
+        }
+        let batch = collected
+        guard !batch.isEmpty else { return }
+
+        // One ordered hop for the whole drain. The main queue is the main
+        // actor's executor, so the assumption holds; it is stated rather than
+        // assumed anew for each event.
+        DispatchQueue.main.async { [store] in
+            MainActor.assumeIsolated {
+                for envelope in batch { store.apply(envelope) }
             }
         }
     }

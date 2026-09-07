@@ -5,7 +5,7 @@ import os
 /// limits. `statusLine` holds a single command, so the existing one is saved
 /// and delegated to, the same chaining other tools already use.
 final class StatuslineInstaller {
-    private let log = Logger(subsystem: "com.appgineering.ampel", category: "installer")
+    private let log = Log("installer")
 
     private let home: URL
     private let defaults: UserDefaults

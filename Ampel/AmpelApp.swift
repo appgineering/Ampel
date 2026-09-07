@@ -44,9 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.watcher = watcher
 
         controller.showOnboardingIfNeeded()
+        CrashPrompt.showIfNeeded()
 
         sweep = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [store] _ in
-            MainActor.assumeIsolated { store.sweepStale() }
+            Task { @MainActor in store.sweepStale() }
         }
     }
 
