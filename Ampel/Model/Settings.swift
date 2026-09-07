@@ -22,6 +22,15 @@ final class Settings {
         didSet { defaults.set(usageStyle.rawValue, forKey: Key.usageStyle) }
     }
 
+    /// First launch shows the setup guide. Also reachable from About.
+    var hasOnboarded: Bool {
+        didSet { defaults.set(hasOnboarded, forKey: Key.onboarded) }
+    }
+
+    var iconStyle: IconStyle {
+        didSet { defaults.set(iconStyle.rawValue, forKey: Key.iconStyle) }
+    }
+
     var pulseOnAttention: Bool {
         didSet { defaults.set(pulseOnAttention, forKey: Key.pulse) }
     }
@@ -32,6 +41,8 @@ final class Settings {
 
     private enum Key {
         static let usageStyle = "usageStyle"
+        static let iconStyle = "iconStyle"
+        static let onboarded = "hasOnboarded"
         static let pulse = "pulseOnAttention"
         static let notify = "notifyOnAttention"
     }
@@ -42,6 +53,8 @@ final class Settings {
         self.defaults = defaults
         defaults.register(defaults: [Key.pulse: true, Key.notify: true])
         usageStyle = UsageStyle(rawValue: defaults.string(forKey: Key.usageStyle) ?? "") ?? .bars
+        iconStyle = IconStyle(rawValue: defaults.string(forKey: Key.iconStyle) ?? "") ?? .dot
+        hasOnboarded = defaults.bool(forKey: Key.onboarded)
         pulseOnAttention = defaults.bool(forKey: Key.pulse)
         notifyOnAttention = defaults.bool(forKey: Key.notify)
     }

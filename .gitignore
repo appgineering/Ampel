@@ -9,3 +9,6 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Release artifacts
+dist/

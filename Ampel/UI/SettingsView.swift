@@ -6,6 +6,10 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Menu bar icon") {
+                IconStylePicker(selection: $settings.iconStyle)
+            }
+
             Section {
                 LaunchAtLoginToggle()
                 Toggle("Pulse the icon when a session is blocked", isOn: $settings.pulseOnAttention)

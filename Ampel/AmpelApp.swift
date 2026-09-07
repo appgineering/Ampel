@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.start()
         self.watcher = watcher
 
+        controller.showOnboardingIfNeeded()
+
         sweep = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [store] _ in
             MainActor.assumeIsolated { store.sweepStale() }
         }
@@ -51,7 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `withObservationTracking` fires once, so it re-arms itself each time.
     private func observeAggregate() {
         withObservationTracking {
-            controller?.update(store.aggregate)
+            // Touch everything the icon reads, so the tracker re-arms on any of it.
+            _ = store.aggregate
+            _ = store.sessions.count
+            _ = settings.iconStyle
+            _ = settings.pulseOnAttention
+            // The ring style draws usage, so a refreshed snapshot must redraw.
+            _ = controller?.usage.snapshot
+            controller?.update()
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeAggregate() }
         }

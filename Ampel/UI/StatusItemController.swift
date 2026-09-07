@@ -18,9 +18,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let settingsWindow: SettingsWindow
     /// Owned here, not by the popover content, which is rebuilt on every open.
     /// A per-open provider threw away its cache and reloaded from scratch.
-    private let usage = UsageProvider()
+    let usage = UsageProvider()
 
-    private var state: AggregateState = .off
+    private var rendered: RenderKey?
     private var monitor: Any?
 
     init(store: AmpelStore, settings: Settings) {
@@ -34,7 +34,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.delegate = self
 
         if let button = statusItem.button {
-            button.image = StatusIcon.image(for: .off)
+            button.image = StatusIcon.image(settings.iconStyle, IconContext())
             button.target = self
             button.action = #selector(togglePopover)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -43,15 +43,45 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     // MARK: - Icon
 
-    func update(_ state: AggregateState) {
-        guard state != self.state else { return }
-        self.state = state
+    /// Everything the icon depends on, so a redraw only happens when one of
+    /// them actually changed.
+    private struct RenderKey: Equatable {
+        var style: IconStyle
+        var aggregate: AggregateState
+        var colors: [NSColor]
+        var progress: Double?
+        var attention: Int
+        var pulsing: Bool
+    }
+
+    func showOnboardingIfNeeded() {
+        guard !settings.hasOnboarded else { return }
+        settingsWindow.showOnboarding()
+    }
+
+    func update() {
+        let sessions = store.sortedSessions
+        let key = RenderKey(
+            style: settings.iconStyle,
+            aggregate: store.aggregate,
+            colors: sessions.map(\.activity.color),
+            progress: progress,
+            attention: sessions.filter { $0.activity == .attention }.count,
+            pulsing: store.aggregate == .attention && settings.pulseOnAttention)
+        guard key != rendered else { return }
+        let wasPulsing = rendered?.pulsing ?? false
+        rendered = key
 
         guard let button = statusItem.button else { return }
-        button.image = StatusIcon.image(for: state)
-        button.layer?.removeAnimation(forKey: Self.pulseKey)
+        button.image = StatusIcon.image(key.style, IconContext(
+            aggregate: key.aggregate,
+            sessionColors: key.colors,
+            progress: key.progress,
+            attentionCount: key.attention))
 
-        guard state == .attention, settings.pulseOnAttention else { return }
+        guard key.pulsing != wasPulsing else { return }
+        button.layer?.removeAnimation(forKey: Self.pulseKey)
+        guard key.pulsing else { return }
 
         // A repeating layer animation is driven by the compositor, so the pulse
         // costs no CPU at all. Swapping pre-rendered images on a timer cost 23%
@@ -65,6 +95,13 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         fade.repeatCount = .infinity
         fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         button.layer?.add(fade, forKey: Self.pulseKey)
+    }
+
+    /// The ring shows the real five hour limit when we have it, and falls back
+    /// to elapsed time through the ccusage block when we do not.
+    private var progress: Double? {
+        if let five = usage.snapshot?.plan?.fiveHour { return five.usedPercentage / 100 }
+        return usage.snapshot?.blockProgress
     }
 
     private static let pulseKey = "ampel.pulse"

@@ -14,13 +14,16 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
     }
 
     private var window: NSWindow?
-    private let panes: [Pane]
+    private var onboarding: NSWindow?
+    private let settings: Settings
+    private var panes: [Pane]
     private var selected: NSToolbarItem.Identifier
     /// Built once each. Rebuilding on every click reset the pane's state and
     /// made the swap visibly flash.
     private var controllers: [NSToolbarItem.Identifier: NSViewController] = [:]
 
     init(settings: Settings) {
+        self.settings = settings
         panes = [
             Pane(id: .init("general"), title: "General", symbol: "gearshape") {
                 NSHostingController(rootView: GeneralSettingsView(settings: settings))
@@ -34,6 +37,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
         ]
         selected = panes[0].id
         super.init()
+
+        // Replaced after init, where referring to self is allowed.
+        panes[2] = Pane(id: .init("about"), title: "About", symbol: "info.circle") { [weak self] in
+            NSHostingController(rootView: AboutView(showSetupGuide: { self?.showOnboarding() }))
+        }
     }
 
     func show(pane id: NSToolbarItem.Identifier? = nil) {
@@ -46,6 +54,28 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
     }
 
     func showAbout() { show(pane: .init("about")) }
+
+    /// A window rather than a popover pane: the popover closes the moment you
+    /// click away, which is what someone does the instant they read a step.
+    func showOnboarding() {
+        let window = onboarding ?? {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 460),
+                                  styleMask: [.titled, .closable],
+                                  backing: .buffered, defer: false)
+            window.title = "Welcome to Ampel"
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.contentViewController = NSHostingController(
+                rootView: OnboardingView(settings: settings) { [weak self] in
+                    self?.settings.hasOnboarded = true
+                    self?.onboarding?.close()
+                })
+            onboarding = window
+            return window
+        }()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(

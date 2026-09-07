@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct AboutView: View {
+    var showSetupGuide: (() -> Void)?
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "0"
@@ -25,18 +27,7 @@ struct AboutView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Legend.all, id: \.label) { entry in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Circle()
-                            .fill(Color(entry.color))
-                            .frame(width: 8, height: 8)
-                        Text(entry.label).fontWeight(.medium)
-                        Text(entry.meaning).foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                }
-            }
+            LegendView()
 
             Divider()
 
@@ -46,6 +37,11 @@ struct AboutView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let showSetupGuide {
+                Button("Show setup guide again", action: showSetupGuide)
+                    .controlSize(.small)
             }
 
             Text("© 2026 Appgineering GbR")
@@ -58,7 +54,24 @@ struct AboutView: View {
     }
 }
 
-private enum Legend {
+struct LegendView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Legend.all, id: \.label) { entry in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Circle()
+                        .fill(Color(entry.color))
+                        .frame(width: 8, height: 8)
+                    Text(entry.label).fontWeight(.medium)
+                    Text(entry.meaning).foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            }
+        }
+    }
+}
+
+enum Legend {
     struct Entry {
         let color: NSColor
         let label: String
