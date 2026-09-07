@@ -51,8 +51,20 @@ echo "==> publish"
 git add project.yml Ampel/Info.plist
 git commit -q -m "chore: release $VERSION"
 git push -q
+# Install instructions live in a file, not in --generate-notes, which would
+# ship a changelog with no way to actually install the thing.
+NOTES=$(mktemp)
+cat Tools/release-notes.md > "$NOTES"
+printf '\n## Changes\n\n' >> "$NOTES"
+# Tags are created server side by gh, so fetch before describing. The repo has
+# two roots after adopting GitHub's initial commit, hence tail -1.
+git fetch --tags -q 2>/dev/null || true
+PREV=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)
+git log --pretty='- %s' "$PREV..HEAD" \
+  | grep -vE '^- (chore: release|Merge )' >> "$NOTES"
 gh release create "v$VERSION" "$ZIP" --repo appgineering/Ampel \
-  --title "Ampel $VERSION" --generate-notes
+  --title "Ampel $VERSION" --notes-file "$NOTES"
+rm -f "$NOTES"
 
 echo "==> cask"
 TAP=$(mktemp -d)
