@@ -5,6 +5,12 @@ struct AboutView: View {
 
     @State private var copied = false
 
+    static let repository = URL(string: "https://github.com/appgineering/Ampel")!
+
+    /// Tagged per surface, so the app and the README can be told apart.
+    static let website = URL(
+        string: "https://appgineering.com/?utm_source=ampel&utm_medium=app&utm_campaign=about")!
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "0"
@@ -64,9 +70,35 @@ struct AboutView: View {
                     .controlSize(.small)
             }
 
-            Text("© 2026 Appgineering GbR")
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text("© 2026")
+                    Link("Appgineering", destination: Self.website)
+                    Text("· MIT licensed ·")
+                    Link("Source", destination: Self.repository)
+                }
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+
+                // Neither the licence nor the copyright line grants trademark
+                // rights, and this app sits right next to Anthropic's name.
+                Text("Not affiliated with, endorsed by, or sponsored by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Usage estimates come from ccusage, a separately licensed tool (MIT) that Ampel runs but does not bundle.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Ampel collects nothing and makes no network requests of its own.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(20)
         .frame(width: 460, alignment: .leading)

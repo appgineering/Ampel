@@ -52,3 +52,17 @@ Run `./Tests/run.sh` for the self-checks: the session state machine, ccusage and
 macOS 14+, Xcode 16+, XcodeGen, Claude Code CLI. Not sandboxed, not for the App Store, a personal utility.
 
 Set `~/.ampel/debug` to make the hook append every envelope it writes to `~/.ampel/hook.log`. Ampel deletes each spool file once applied, so this is the only way to reconstruct what a session actually emitted.
+
+## Privacy
+
+Ampel collects nothing and makes no network requests of its own. See [PRIVACY.md](PRIVACY.md) for exactly which files it reads and writes, including the one opt-in debug mode that records prompt text locally.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
+
+Built by [Appgineering](https://appgineering.com/?utm_source=ampel&utm_medium=readme&utm_campaign=github).
+
+Ampel is not affiliated with, endorsed by, or sponsored by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC.
+
+[ccusage](https://github.com/ryoppippi/ccusage) is an optional, separately licensed tool (MIT, by ryoppippi). Ampel runs it as a subprocess when it is installed and does not bundle or link any part of it.

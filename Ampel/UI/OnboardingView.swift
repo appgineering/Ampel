@@ -77,9 +77,13 @@ struct OnboardingView: View {
             Divider()
             LaunchAtLoginToggle()
             Spacer()
-            Text("All of this lives in Settings, reachable from the menu whenever you want to change it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("All of this lives in Settings, reachable from the menu whenever you want to change it.")
+                Text("Ampel is MIT licensed and not affiliated with Anthropic.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

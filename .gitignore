@@ -9,6 +9,12 @@ xcuserdata/
 
 # macOS
 .DS_Store
+.AppleDouble
+Icon?
+
+# Local runtime state, never part of the repo
+*.bak-*
+*.log
 
 # Release artifacts
 dist/
