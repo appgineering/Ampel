@@ -35,6 +35,18 @@ A normal preferences window with General, Usage and About panes: launch at login
 - `docs/SPEC.md` — full technical specification (architecture, hook contract, state machine, UI)
 - `docs/MILESTONES.md` — build plan with acceptance criteria, execute in order
 
+## Install
+
+```sh
+brew trust appgineering/tap
+brew tap appgineering/tap
+brew install --cask ampel
+```
+
+`brew trust` comes first because Homebrew 6 refuses to load casks from a tap you have not explicitly trusted, and reports the refusal as a syntax error. Or download the latest [release](https://github.com/appgineering/Ampel/releases), unzip, and drag `Ampel.app` to `/Applications`.
+
+The icon starts gray. Open it and use the setup guide to install the Claude Code hooks; nothing is tracked until those are in place.
+
 ## Generating the Xcode project
 
 The project is defined in `project.yml` (XcodeGen). The `.xcodeproj` is generated and gitignored:
