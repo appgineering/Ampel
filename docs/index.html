@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ampel — a traffic light for your Claude Code sessions</title>
+<meta name="description" content="A macOS menu bar app that shows whether any Claude Code session needs you. Green when idle, yellow while working, red when blocked on a permission prompt.">
+<link rel="icon" href="media/favicon.png">
+<meta property="og:title" content="Ampel — a traffic light for your Claude Code sessions">
+<meta property="og:description" content="Know at a glance when Claude Code needs you. Native macOS menu bar app, MIT licensed.">
+<meta property="og:image" content="https://appgineering.github.io/Ampel/media/popover.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --bg: #0d0e12; --panel: #16181f; --line: #262933;
+    --text: #eef0f5; --muted: #9aa0ae; --dim: #6b7280;
+    --red: #ff453a; --amber: #ffd60a; --green: #32d74b; --accent: #4f8cff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 72px 0 40px; text-align: center; }
+  .icon { width: 96px; height: 96px; border-radius: 22px; }
+  h1 { font-size: 44px; margin: 20px 0 8px; letter-spacing: -0.02em; }
+  .tagline { font-size: 20px; color: var(--muted); margin: 0 auto 28px; max-width: 620px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn {
+    display: inline-block; padding: 11px 20px; border-radius: 10px;
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  .btn:hover { text-decoration: none; filter: brightness(1.1); }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .note { color: var(--dim); font-size: 14px; }
+  .shot { width: 100%; border-radius: var(--radius); display: block; }
+  figure { margin: 0; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; }
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 26px; margin: 0 0 20px; letter-spacing: -0.01em; }
+  .states { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .states li { display: flex; gap: 12px; align-items: baseline; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; transform: translateY(1px); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.7;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d6dae4;
+  }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+  .gallery img { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: #101218; }
+  footer { padding: 40px 0 64px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
+  footer p { margin: 6px 0; }
+  @media (max-width: 620px) { h1 { font-size: 34px; } .tagline { font-size: 18px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <img class="icon" src="media/icon.png" alt="Ampel app icon, a traffic light">
+  <h1>Ampel</h1>
+  <p class="tagline">A traffic light for your Claude Code sessions, in the macOS menu bar. Know when Claude needs you without going to look.</p>
+  <div class="cta">
+    <a class="btn" href="https://github.com/appgineering/Ampel/releases/latest">Download for macOS</a>
+    <a class="btn ghost" href="https://github.com/appgineering/Ampel">View on GitHub</a>
+  </div>
+  <p class="note">macOS 14 or later. Signed and notarized by Apple. MIT licensed.</p>
+</header>
+
+<figure>
+  <img class="shot" src="media/demo.gif" alt="The menu bar icon turning yellow while Claude works, then red when it needs permission, with a list of sessions">
+  <figcaption>Three sessions running. One starts working, another needs permission to run a migration, then both finish.</figcaption>
+</figure>
+
+<section>
+  <h2>Colour is the whole interface</h2>
+  <ul class="states">
+    <li><span class="dot" style="background: var(--red)"></span><span><strong>Red</strong> — Claude is blocked on you. A permission prompt, or a tool asking for input.</span></li>
+    <li><span class="dot" style="background: var(--amber)"></span><span><strong>Yellow</strong> — working. Tools running, a response streaming.</span></li>
+    <li><span class="dot" style="background: var(--green)"></span><span><strong>Green</strong> — idle. The last turn finished.</span></li>
+    <li><span class="dot" style="background: var(--dim)"></span><span><strong>Gray</strong> — no sessions running.</span></li>
+  </ul>
+  <p style="color: var(--muted)">Several sessions aggregate worst-case, so the icon always shows the one that needs you most. Sitting at an empty prompt deliberately does not count as needing you, or the light would be red all day.</p>
+</section>
+
+<section>
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Every session at once</h3>
+      <p>One row per session with the project name, what it is doing, and how long ago. Blocked ones sort first, with the message that blocked them.</p>
+    </div>
+    <div class="card">
+      <h3>Your real plan usage</h3>
+      <p>The same 5-hour and 7-day percentages the <code>/usage</code> screen shows, read from Claude Code itself. Optional, and it chains onto any statusline you already have.</p>
+    </div>
+    <div class="card">
+      <h3>Six icon styles</h3>
+      <p>A dot, a traffic light, a ring that doubles as a usage gauge, or one bar per session. Previewed live in settings.</p>
+    </div>
+    <div class="card">
+      <h3>Quiet by default</h3>
+      <p>One notification when a session actually blocks, never for anything else. Idle costs zero CPU, and the pulse is drawn by the compositor.</p>
+    </div>
+    <div class="card">
+      <h3>Nothing leaves your Mac</h3>
+      <p>No analytics, no telemetry, no account, no network requests of its own. <a href="https://github.com/appgineering/Ampel/blob/main/PRIVACY.md">Every file it touches is listed.</a></p>
+    </div>
+    <div class="card">
+      <h3>No dependencies</h3>
+      <p>Native Swift and SwiftUI, no packages. Claude Code hooks write small files; Ampel watches the folder.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Install</h2>
+  <pre>brew trust appgineering/tap
+brew tap appgineering/tap
+brew install --cask ampel</pre>
+  <p style="color: var(--muted)"><code>brew trust</code> comes first because Homebrew refuses casks from taps you have not explicitly trusted, and reports the refusal as a syntax error. Or <a href="https://github.com/appgineering/Ampel/releases/latest">download the zip</a>, unzip it and drag <code>Ampel.app</code> to Applications.</p>
+  <p style="color: var(--muted)">The icon starts gray. Open it and follow the setup guide, which installs the Claude Code hooks. Your existing settings and any hooks from other tools are preserved, and a timestamped backup is written first.</p>
+</section>
+
+<section>
+  <h2>Screenshots</h2>
+  <div class="gallery">
+    <figure><img src="media/popover.png" alt="The session list showing three projects, one blocked on a permission prompt"><figcaption>Sessions, worst first, with usage below.</figcaption></figure>
+    <figure><img src="media/settings-general.png" alt="Settings window showing six menu bar icon styles"><figcaption>Six icon styles, previewed live.</figcaption></figure>
+    <figure><img src="media/settings-usage.png" alt="Usage settings showing the real plan usage option"><figcaption>Real plan limits, estimates, or nothing.</figcaption></figure>
+    <figure><img src="media/onboarding-1-welcome.png" alt="The setup guide on first launch"><figcaption>A setup guide on first launch.</figcaption></figure>
+  </div>
+</section>
+
+<footer>
+  <p>Built by <a href="https://appgineering.com/?utm_source=ampel&utm_medium=site&utm_campaign=github_pages">Appgineering</a>. MIT licensed. <a href="https://github.com/appgineering/Ampel">Source on GitHub</a>.</p>
+  <p>Not affiliated with, endorsed by, or sponsored by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC.</p>
+  <p>Usage estimates come from <a href="https://github.com/ryoppippi/ccusage">ccusage</a>, a separately licensed tool that Ampel runs but does not bundle.</p>
+</footer>
+
+</div>
+</body>
+</html>
