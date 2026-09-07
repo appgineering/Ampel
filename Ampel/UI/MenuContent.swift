@@ -24,9 +24,16 @@ struct MenuContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(store.sortedSessions) { session in
-                        SessionRow(session: session, disambiguate: ambiguousNames.contains(session.displayName))
+                // Relative times are only correct at the moment they render, so
+                // re-render once a second. The menu content exists only while
+                // the popover is open, so this costs nothing when it is closed.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(store.sortedSessions) { session in
+                            SessionRow(session: session,
+                                       now: context.date,
+                                       disambiguate: ambiguousNames.contains(session.displayName))
+                        }
                     }
                 }
             }
@@ -50,6 +57,7 @@ struct MenuContent: View {
 
 private struct SessionRow: View {
     let session: Session
+    let now: Date
     let disambiguate: Bool
 
     var body: some View {
@@ -65,7 +73,8 @@ private struct SessionRow: View {
                         .fontWeight(.medium)
                         .lineLimit(1)
                     Spacer()
-                    Text(session.lastActivity, format: .relative(presentation: .named))
+                    Text(session.lastActivity.formatted(
+                        .relative(presentation: .named, unitsStyle: .wide)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

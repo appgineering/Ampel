@@ -4,7 +4,7 @@ A native macOS menu bar app that shows, at a glance, whether any running Claude 
 
 | Color | State | Meaning |
 |---|---|---|
-| 🔴 Red | `attention` | Claude is waiting on you: permission prompt, or idle waiting for input |
+| 🔴 Red | `attention` | Claude is blocked on a decision from you: a permission prompt or a tool asking for input |
 | 🟡 Yellow | `working` | Claude is actively processing (tools running, response streaming) |
 | 🟢 Green | `idle` | Last turn finished, nothing pending |
 | ⚪️ Gray | `off` | No active Claude Code sessions |

@@ -56,11 +56,26 @@ struct HookEnvelope: Decodable {
         let sessionId: String?
         let cwd: String?
         let message: String?
+        let notificationType: String?
 
         enum CodingKeys: String, CodingKey {
             case sessionId = "session_id"
             case cwd
             case message
+            case notificationType = "notification_type"
+        }
+
+        /// Notification types that do not represent a decision waiting on the
+        /// user. Anything else, including an absent or unrecognised type, does:
+        /// a new blocking notification type should show up, not be swallowed.
+        static let nonBlockingNotifications: Set<String> = [
+            "idle_prompt", "auth_success", "elicitation_complete", "elicitation_response",
+            "quota_auto_resume_fired", "quota_auto_resume_stale", "quota_auto_resume_disabled",
+        ]
+
+        var isBlockingNotification: Bool {
+            guard let notificationType else { return true }
+            return !Self.nonBlockingNotifications.contains(notificationType)
         }
     }
 

@@ -24,13 +24,17 @@ dir="$HOME/.ampel/events"
 mkdir -p "$dir"
 payload="$(cat)"
 [ -z "$payload" ] && payload='{}'
+envelope="$(printf '{"event":"%s","received_at":%s,"payload":%s}' "$1" "$(date +%s)" "$payload")"
 tmp="$dir/.tmp-$$-$RANDOM"
-printf '{"event":"%s","received_at":%s,"payload":%s}' "$1" "$(date +%s)" "$payload" > "$tmp"
+printf '%s' "$envelope" > "$tmp"
 mv "$tmp" "$dir/$(date +%s)-$$-$RANDOM.json"
+[ -e "$HOME/.ampel/debug" ] && printf '%s\n' "$envelope" >> "$HOME/.ampel/hook.log"
 exit 0
 ```
 
 Write-then-rename prevents the watcher from reading half-written files. Always exits 0.
+
+The app deletes each spool file once applied, so a sequence of events cannot be reconstructed afterwards. Creating `~/.ampel/debug` makes the hook also append every envelope to `~/.ampel/hook.log`, which is the only way to tell a lost event apart from a mishandled one. Off by default: the file does not exist.
 
 ### 2.2 Hooks block for `~/.claude/settings.json` (merge, never overwrite; backup first)
 
@@ -78,11 +82,13 @@ Transition table, keyed by `session_id`:
 | `SessionStart` | upsert session, `idle` |
 | `UserPromptSubmit` | `working` |
 | `PreToolUse` / `PostToolUse` | `working` |
-| `Notification` | `attention`, store `message` |
+| `Notification` | `attention` when `notification_type` warrants it (below), store `message` |
 | `Stop` / `SubagentStop` | `idle` |
 | `SessionEnd` | remove session |
 
-The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …). Only `message` is used; `notification_type` is a documented hook field kept in reserve if the two cases ever need to be distinguished. `lastMessage` is cleared whenever a session leaves `attention`, so a green row never shows a stale "waiting for your input".
+The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …).
+
+Only notifications that represent a decision waiting on the user turn a session red: `permission_prompt`, `agent_needs_input`, and the `elicitation_*` dialogs. `idle_prompt` does not, because Claude Code fires it whenever a session sits at an empty prompt, which is most of the time a session is open and would pin the icon red permanently. A `Notification` with an unrecognised or absent `notification_type` is treated as needing attention, so a new blocking notification type shows up rather than being silently swallowed. `lastMessage` is cleared whenever a session leaves `attention`, so a green row never shows a stale "waiting for your input".
 
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 

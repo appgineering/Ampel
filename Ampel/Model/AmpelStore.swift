@@ -50,6 +50,7 @@ final class AmpelStore {
         }
 
         if envelope.event == "SessionEnd" {
+            log.info("\(id, privacy: .public) SessionEnd, removing")
             sessions.removeValue(forKey: id)
             return
         }
@@ -58,7 +59,15 @@ final class AmpelStore {
         switch envelope.event {
         case "SessionStart", "Stop", "SubagentStop": activity = .idle
         case "UserPromptSubmit", "PreToolUse", "PostToolUse": activity = .working
-        case "Notification": activity = .attention
+        case "Notification":
+            // Only a decision waiting on the user goes red. Claude Code also
+            // fires Notification when a session merely sits at an empty
+            // prompt, which would pin the icon red permanently. SPEC §3.
+            guard envelope.payload.isBlockingNotification else {
+                touch(id, envelope)
+                return
+            }
+            activity = .attention
         default:
             log.info("unknown event \(envelope.event, privacy: .public), ignored")
             return
@@ -74,9 +83,19 @@ final class AmpelStore {
         session.lastMessage = activity == .attention ? envelope.payload.message : nil
         sessions[id] = session
 
+        log.info("\(id, privacy: .public) \(envelope.event, privacy: .public) -> \(String(describing: activity), privacy: .public) (\(self.sessions.count, privacy: .public) live)")
+
         if activity == .attention && previous?.activity != .attention {
             onAttention?(session)
         }
+    }
+
+    /// Refreshes liveness and cwd without changing the activity.
+    private func touch(_ id: String, _ envelope: HookEnvelope) {
+        guard var session = sessions[id] else { return }
+        session.lastActivity = Date(timeIntervalSince1970: TimeInterval(envelope.receivedAt))
+        if let cwd = envelope.payload.cwd { session.cwd = cwd }
+        sessions[id] = session
     }
 
     func sweepStale(olderThan interval: TimeInterval = 6 * 3600) {
