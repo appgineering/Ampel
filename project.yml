@@ -1,0 +1,32 @@
+name: Ampel
+options:
+  bundleIdPrefix: com.appgineering
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  xcodeVersion: "16.0"
+
+targets:
+  Ampel:
+    type: application
+    platform: macOS
+    sources:
+      - Ampel
+    info:
+      path: Ampel/Info.plist
+      properties:
+        CFBundleDisplayName: Ampel
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: "© 2026 Appgineering GbR"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.appgineering.ampel
+        SWIFT_VERSION: "5.10"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: false
+        COMBINE_HIDPI_IMAGES: true
+        SWIFT_STRICT_CONCURRENCY: complete
