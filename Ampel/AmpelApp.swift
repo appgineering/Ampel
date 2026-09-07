@@ -1,34 +1,54 @@
+import AppKit
 import SwiftUI
 
 @main
 struct AmpelApp: App {
-    @State private var store = AmpelStore()
-    @State private var icon = StatusIconModel()
-    @State private var watcher: EventWatcher?
-    @State private var notifier = Notifier()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuContent(store: store)
-        } label: {
-            Image(nsImage: icon.image)
-                .onAppear(perform: startOnce)
-                .onChange(of: store.aggregate, initial: true) { _, state in
-                    icon.update(state)
-                }
-        }
-        .menuBarExtraStyle(.window)
+        // The menu bar item is an NSStatusItem owned by AppDelegate; see
+        // StatusItemController for why. This scene exists only to satisfy App.
+        SwiftUI.Settings { EmptyView() }
     }
+}
 
-    private func startOnce() {
-        guard watcher == nil else { return }
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let store = AmpelStore()
+    private let settings = Settings()
+    private let notifier = Notifier()
+    private var controller: StatusItemController?
+    private var watcher: EventWatcher?
+    private var sweep: Timer?
+    private var observation: NSObjectProtocol?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let controller = StatusItemController(store: store, settings: settings)
+        self.controller = controller
+
         notifier.requestAuthorization()
-        store.onAttention = { [notifier] session in notifier.notify(session) }
+        store.onAttention = { [notifier, settings] session in
+            guard settings.notifyOnAttention else { return }
+            notifier.notify(session)
+        }
+
+        observeAggregate()
+
         let watcher = EventWatcher(store: store)
         watcher.start()
         self.watcher = watcher
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+
+        sweep = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [store] _ in
             MainActor.assumeIsolated { store.sweepStale() }
+        }
+    }
+
+    /// `withObservationTracking` fires once, so it re-arms itself each time.
+    private func observeAggregate() {
+        withObservationTracking {
+            controller?.update(store.aggregate)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeAggregate() }
         }
     }
 }

@@ -3,7 +3,14 @@ import SwiftUI
 
 struct MenuContent: View {
     var store: AmpelStore
+    var settings: Settings
     var provider = UsageProvider()
+
+    var openSettings: () -> Void
+    var openAbout: () -> Void
+
+    private let installer = HookInstaller()
+    @State private var installState: InstallState = .ready
 
     /// Project names shared by more than one live session. Those rows get a
     /// short session id so parallel sessions in one repo stay tellable apart.
@@ -41,20 +48,46 @@ struct MenuContent: View {
 
             Divider()
 
-            UsageSection(provider: provider)
+            if settings.usageStyle != .hidden {
+                UsageSection(provider: provider, style: settings.usageStyle)
+            }
 
             Divider()
 
-            LaunchAtLoginToggle()
 
-            InstallHooksButton()
+            InstallStatusView(state: installState, install: installHooks)
 
-            Button("Quit Ampel") {
-                NSApplication.shared.terminate(nil)
+            HStack {
+                Button("Settings…", action: openSettings)
+                Button("About", action: openAbout)
+                Spacer()
+                Button("Quit Ampel") { NSApplication.shared.terminate(nil) }
             }
         }
         .padding(12)
         .frame(width: 300)
+        // Must live on a view that always renders. Hanging it off the button
+        // itself never ran, because that button is absent precisely when the
+        // check still needs to happen.
+        .task {
+            if case .ready = installState {
+                installState = installer.isInstalled ? .ready : .needed
+            }
+        }
+    }
+
+    private func installHooks() {
+        installState = .installing
+        do {
+            let backup = try installer.install()
+            guard installer.isInstalled else {
+                installState = .failed("Install ran but the hooks are still missing.")
+                return
+            }
+            installState = .done(backedUp: backup != nil)
+        } catch {
+            installState = .failed(error.localizedDescription)
+        }
     }
 }
 
@@ -96,70 +129,182 @@ private struct SessionRow: View {
     }
 }
 
-private struct LaunchAtLoginToggle: View {
-    @State private var enabled = SMAppService.mainApp.status == .enabled
-
-    var body: some View {
-        Toggle("Launch at Login", isOn: $enabled)
-            .toggleStyle(.checkbox)
-            .onChange(of: enabled) { _, on in
-                do {
-                    on ? try SMAppService.mainApp.register()
-                       : try SMAppService.mainApp.unregister()
-                } catch {
-                    enabled = SMAppService.mainApp.status == .enabled
-                }
-            }
-    }
-}
-
 private struct UsageSection: View {
     let provider: UsageProvider
+    let style: Settings.UsageStyle
     @State private var usage: UsageSnapshot?
-    @State private var loaded = false
+    @State private var failed = false
+
+    private var loading: Bool { usage == nil && !failed }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let usage {
-                Text(usage.currentBlockLine)
-                Text(usage.todayLine)
-            } else if loaded {
+        VStack(alignment: .leading, spacing: 6) {
+            if failed {
                 Text("Usage unavailable. Install it with brew install ccusage")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let plan = usage?.plan {
+                // Real limits beat estimates, so they take the space.
+                if let five = plan.fiveHour {
+                    UsageBar(title: "Session \(UsageProvider.percent(five.usedPercentage))",
+                             progress: five.usedPercentage / 100,
+                             caption: five.resetsAt.map { "resets \($0.formatted(.dateTime.hour().minute()))" },
+                             tint: .accentColor,
+                             loading: false)
+                }
+                if let seven = plan.sevenDay {
+                    UsageBar(title: "This week \(UsageProvider.percent(seven.usedPercentage))",
+                             progress: seven.usedPercentage / 100,
+                             caption: seven.resetsAt.map { "resets \($0.formatted(.dateTime.weekday(.abbreviated).hour().minute()))" },
+                             tint: .accentColor,
+                             loading: false)
+                }
+                if let spend = plan.spendLimit {
+                    UsageBar(title: "Spend limit \(UsageProvider.percent(spend.usedPercentage))",
+                             progress: min(spend.usedPercentage / 100, 1),
+                             caption: nil, tint: .secondary, loading: false)
+                }
+            } else if style == .text {
+                Text(usage?.currentBlockLine ?? "Current block: $00.00 · 00M tokens")
+                    .font(.caption)
+                    .redacted(reason: loading ? .placeholder : [])
+                Text(usage?.todayLine ?? "Today: $00.00")
+                    .font(.caption)
+                    .redacted(reason: loading ? .placeholder : [])
             } else {
-                Text("Loading usage…")
+                UsageBar(title: usage?.blockLabel ?? "Current block: $00.00 · 00M tokens",
+                         progress: usage?.blockProgress,
+                         caption: resetCaption,
+                         tint: .accentColor,
+                         loading: loading)
+                UsageBar(title: usage?.todayLine ?? "Today: $00.00",
+                         progress: usage?.todayProgress,
+                         caption: peakCaption,
+                         tint: .secondary,
+                         loading: loading)
             }
         }
-        .font(.caption)
         .foregroundStyle(.secondary)
+        // Reserved so the popover does not resize when the numbers land.
+        .frame(height: reservedHeight, alignment: .top)
         .task {
             // Refreshes every time the menu opens; the provider caches for 60s.
-            usage = await provider.fetch()
-            loaded = true
+            let fetched = await provider.fetch()
+            usage = fetched
+            failed = fetched == nil
         }
+    }
+
+    /// Reserved so the popover does not resize when the numbers land. Plan
+    /// usage can show a third bar, so it gets measured rather than guessed.
+    private var reservedHeight: CGFloat {
+        if style == .text { return 34 }
+        let bars = usage?.plan.map { plan in
+            [plan.fiveHour, plan.sevenDay, plan.spendLimit].compactMap { $0 }.count
+        } ?? 2
+        return CGFloat(max(bars, 2)) * 31
+    }
+
+    private var resetCaption: String? {
+        guard let resets = usage?.blockResets else { return nil }
+        return "resets \(resets.formatted(.dateTime.hour().minute()))"
+    }
+
+    private var peakCaption: String? {
+        guard let peak = usage?.todayPeak else { return nil }
+        return "7-day peak \(UsageProvider.money(peak))"
     }
 }
 
-/// Shown only until the hooks are in place. See SPEC §8.
-private struct InstallHooksButton: View {
-    private let installer = HookInstaller()
-    @State private var installed = true
-    @State private var failure: String?
+/// A labelled bar. With no progress value it renders an empty track, which is
+/// what keeps the section the same height while ccusage is still running.
+private struct UsageBar: View {
+    let title: String
+    let progress: Double?
+    let caption: String?
+    let tint: Color
+    let loading: Bool
 
     var body: some View {
-        Group {
-            if let failure {
-                Text(failure).font(.caption).foregroundStyle(.red)
-            } else if !installed {
-                Button("Install hooks…") {
-                    do {
-                        try installer.install()
-                        installed = true
-                    } catch {
-                        failure = error.localizedDescription
-                    }
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.caption)
+                    .redacted(reason: loading ? .placeholder : [])
+                Spacer(minLength: 8)
+                if let caption {
+                    Text(caption).font(.caption2).foregroundStyle(.tertiary)
+                } else if loading {
+                    Text("loading").font(.caption2).foregroundStyle(.tertiary)
+                        .redacted(reason: .placeholder)
                 }
             }
+            if loading {
+                // Indeterminate: ccusage takes a beat, and an empty track that
+                // suddenly fills reads as "zero usage" rather than "not known yet".
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                    .frame(height: 4)
+            } else {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.quaternary)
+                        Capsule()
+                            .fill(tint)
+                            .frame(width: geometry.size.width * (progress ?? 0))
+                    }
+                }
+                .frame(height: 4)
+            }
         }
-        .task { installed = installer.isInstalled }
+        .foregroundStyle(.secondary)
+    }
+}
+
+enum InstallState {
+    case ready                      // hooks are in place, say nothing
+    case needed
+    case installing
+    case done(backedUp: Bool)
+    case failed(String)
+}
+
+private struct InstallStatusView: View {
+    let state: InstallState
+    let install: () -> Void
+
+    var body: some View {
+        switch state {
+        case .ready:
+            EmptyView()
+        case .needed:
+            VStack(alignment: .leading, spacing: 2) {
+                Button("Install hooks…", action: install)
+                Text("Ampel needs Claude Code hooks to see your sessions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .installing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Installing hooks…").font(.caption)
+            }
+        case .done(let backedUp):
+            Label {
+                Text(backedUp
+                     ? "Hooks installed. Your previous settings.json was backed up."
+                     : "Hooks installed.")
+                .font(.caption)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+        case .failed(let message):
+            Label {
+                Text(message).font(.caption)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
+        }
     }
 }
