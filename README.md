@@ -1,5 +1,7 @@
 # Ampel
 
+**[appgineering.github.io/Ampel](https://appgineering.github.io/Ampel/)**
+
 A native macOS menu bar app that shows, at a glance, whether any running Claude Code session needs your attention — like a traffic light.
 
 <p align="center">
