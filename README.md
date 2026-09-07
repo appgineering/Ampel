@@ -2,6 +2,10 @@
 
 A native macOS menu bar app that shows, at a glance, whether any running Claude Code session needs your attention — like a traffic light.
 
+<p align="center">
+  <img src="docs/media/demo.gif" alt="Ampel in the macOS menu bar, turning yellow while Claude works and red when it needs a decision" width="680">
+</p>
+
 | Color | State | Meaning |
 |---|---|---|
 | 🔴 Red | `attention` | Claude is blocked on a decision from you: a permission prompt or a tool asking for input |
@@ -64,6 +68,15 @@ Run `./Tests/run.sh` for the self-checks: the session state machine, ccusage and
 macOS 14+, Xcode 16+, XcodeGen, Claude Code CLI. Not sandboxed, not for the App Store, a personal utility.
 
 Set `~/.ampel/debug` to make the hook append every envelope it writes to `~/.ampel/hook.log`. Ampel deletes each spool file once applied, so this is the only way to reconstruct what a session actually emitted.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Sessions](docs/media/popover.png) | ![Menu bar icon styles](docs/media/settings-general.png) |
+| Every session, worst first, with the reason it is waiting. | Six icon styles, previewed live. |
+| ![Usage settings](docs/media/settings-usage.png) | ![Setup guide](docs/media/onboarding-1-welcome.png) |
+| Real plan limits, or ccusage estimates, or nothing. | A setup guide on first launch. |
 
 ## Privacy
 
