@@ -3,8 +3,8 @@
 # Usage: ./Tools/release.sh 0.4.0
 #
 # Needs: a Developer ID certificate, an App Store Connect API key for
-# notarytool, and gh authenticated. The tap is cloned fresh each run so a
-# stale local copy cannot publish a wrong hash.
+# notarytool, and gh authenticated. The cask is edited through the gh API, so
+# no local clone of the tap can publish a wrong hash.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -67,19 +67,26 @@ gh release create "v$VERSION" "$ZIP" --repo appgineering/Ampel \
 rm -f "$NOTES"
 
 echo "==> cask"
-TAP=$(mktemp -d)
-git clone -q git@github.com:appgineering/homebrew-tap.git "$TAP"
-/usr/bin/python3 - "$TAP/Casks/ampel.rb" "$VERSION" "$SHA" <<'PY'
-import re, sys
-path, version, sha = sys.argv[1:4]
-text = open(path).read()
+# Over the gh API rather than a clone and an ssh push: that push hung here and
+# left the tap a version behind an already published release.
+/usr/bin/python3 - "$VERSION" "$SHA" <<'CASK'
+import base64, json, re, subprocess, sys
+
+version, sha = sys.argv[1:3]
+path = "repos/appgineering/homebrew-tap/contents/Casks/ampel.rb"
+
+current = json.loads(subprocess.run(["gh", "api", path], text=True,
+                                    capture_output=True, check=True).stdout)
+text = base64.b64decode(current["content"]).decode()
 text = re.sub(r'version "[^"]+"', f'version "{version}"', text)
 text = re.sub(r'sha256 "[^"]+"', f'sha256 "{sha}"', text)
-open(path, "w").write(text)
-PY
-git -C "$TAP" commit -qam "Update ampel to $VERSION"
-git -C "$TAP" push -q
-rm -rf "$TAP"
+
+subprocess.run(["gh", "api", "-X", "PUT", path,
+                "-f", f"message=Update ampel to {version}",
+                "-f", f"sha={current['sha']}",
+                "-f", "content=" + base64.b64encode(text.encode()).decode()],
+               check=True, stdout=subprocess.DEVNULL)
+CASK
 
 echo "==> homebrew-cask notability"
 ./Tools/notability.sh

@@ -8,12 +8,16 @@ struct GeneralSettingsView: View {
         Form {
             Section("Menu bar icon") {
                 IconStylePicker(selection: $settings.iconStyle)
-                Slider(value: $settings.iconScale, in: 0.7...1.2, step: 0.1) {
-                    Text("Size")
-                } minimumValueLabel: {
-                    Text("Small").font(.caption).foregroundStyle(.secondary)
-                } maximumValueLabel: {
-                    Text("Large").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Slider(value: $settings.iconScale, in: 0.7...1.2, step: 0.1) {
+                        Text("Size")
+                    } minimumValueLabel: {
+                        Text("Small").font(.caption).foregroundStyle(.secondary)
+                    } maximumValueLabel: {
+                        Text("Large").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button("Reset") { settings.iconScale = 1 }
+                        .disabled(settings.iconScale == 1)
                 }
             }
 
