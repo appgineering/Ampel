@@ -99,6 +99,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         button.layer?.add(fade, forKey: Self.pulseKey)
     }
 
+    /// The closed popover kept its hosting controller, whose 1s TimelineView
+    /// went on re-rendering session rows for nobody.
+    func popoverDidClose(_ notification: Notification) {
+        popover.contentViewController = nil
+    }
+
     /// The ring shows the real five hour limit when we have it, and falls back
     /// to elapsed time through the ccusage block when we do not.
     private var progress: Double? {

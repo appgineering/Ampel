@@ -64,6 +64,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
                                   backing: .buffered, defer: false)
             window.title = "Welcome to Ampel"
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             window.contentViewController = NSHostingController(
                 rootView: OnboardingView(settings: settings) { [weak self] in
@@ -138,6 +139,18 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
         item.target = self
         item.action = #selector(toolbarItemClicked(_:))
         return item
+    }
+
+    // MARK: - NSWindowDelegate
+
+    /// A closed window still lays out its SwiftUI content: the icon preview's
+    /// 20fps TimelineView kept the app at 20-40% CPU with nothing on screen.
+    /// Drop the content so the tree is torn down, and rebuild it on next show.
+    func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSWindow else { return }
+        closing.contentViewController = nil
+        if closing === window { controllers.removeAll() }
+        if closing === onboarding { onboarding = nil }
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {

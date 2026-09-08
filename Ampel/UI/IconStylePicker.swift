@@ -56,7 +56,7 @@ private struct StyleCard: View {
 private struct AnimatedIcon: View {
     let style: IconStyle
 
-    private static let script: [IconContext] = [
+    static let script: [IconContext] = [
         IconContext(aggregate: .off, sessionColors: [], progress: 0.1, attentionCount: 0),
         IconContext(aggregate: .idle, sessionColors: [.systemGreen], progress: 0.3, attentionCount: 0),
         IconContext(aggregate: .working,
@@ -69,19 +69,42 @@ private struct AnimatedIcon: View {
     ]
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0 / 20)) { timeline in
-            let elapsed = timeline.date.timeIntervalSinceReferenceDate
-            let step = Int(elapsed / 1.2) % Self.script.count
-            let context = Self.script[step]
-            // Same 1s ease-in-out down to half opacity as the real pulse.
-            let pulse = context.aggregate == .attention
-                ? 1 - 0.5 * (1 - cos(2 * .pi * elapsed.truncatingRemainder(dividingBy: 1))) / 2
-                : 1
+        // Steps once per state. The pulse is a repeating layer animation on an
+        // NSImageView, as in the menu bar: SwiftUI's own opacity animation
+        // re-rasterized every image each frame and cost 20-50% CPU.
+        TimelineView(.periodic(from: .now, by: 1.2)) { timeline in
+            let step = Int(timeline.date.timeIntervalSinceReferenceDate / 1.2) % Self.script.count
+            PulsingImage(image: StatusIcon.image(style, Self.script[step]),
+                         pulsing: Self.script[step].aggregate == .attention)
+        }
+    }
+}
 
-            Image(nsImage: StatusIcon.image(style, context))
-                .resizable()
-                .interpolation(.high)
-                .opacity(pulse)
+private struct PulsingImage: NSViewRepresentable {
+    let image: NSImage
+    let pulsing: Bool
+
+    func makeNSView(context: Context) -> NSImageView {
+        let view = NSImageView()
+        view.wantsLayer = true
+        view.imageScaling = .scaleProportionallyUpOrDown
+        return view
+    }
+
+    func updateNSView(_ view: NSImageView, context: Context) {
+        view.image = image
+        let key = "ampel.pulse"
+        if pulsing, view.layer?.animation(forKey: key) == nil {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1.0
+            fade.toValue = 0.5
+            fade.duration = 0.5
+            fade.autoreverses = true
+            fade.repeatCount = .infinity
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            view.layer?.add(fade, forKey: key)
+        } else if !pulsing {
+            view.layer?.removeAnimation(forKey: key)
         }
     }
 }
