@@ -20,6 +20,25 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(AmpelStore().summary, "No active sessions")
     }
 
+    /// Quitting Ampel while a session is mid-flight must not lose it.
+    func testSurvivesRelaunch() throws {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ampel-\(UUID().uuidString)/sessions.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let store = AmpelStore(stateURL: url)
+        store.apply(try envelope("UserPromptSubmit", "a", at: Int(Date().timeIntervalSince1970)))
+        XCTAssertEqual(store.aggregate, .working)
+
+        let relaunched = AmpelStore(stateURL: url)
+        XCTAssertEqual(relaunched.aggregate, .working)
+        XCTAssertEqual(relaunched.sessions["a"]?.cwd, "/tmp/proj")
+
+        // ...but a session last seen days ago is not resurrected.
+        store.apply(try envelope("SessionStart", "old", at: 1_000))
+        XCTAssertEqual(AmpelStore(stateURL: url).sessions.keys.sorted(), ["a"])
+    }
+
     func testTransitionTable() throws {
         let store = AmpelStore()
         store.apply(try envelope("SessionStart", "a"))

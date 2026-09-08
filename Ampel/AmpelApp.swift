@@ -14,7 +14,7 @@ struct AmpelApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let store = AmpelStore()
+    private let store = AmpelStore(stateURL: AmpelStore.defaultStateURL)
     private let settings = Settings()
     private let notifier = Notifier()
     private var controller: StatusItemController?
@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.start()
         self.watcher = watcher
 
+        TranslocationPrompt.showIfNeeded()
         controller.showOnboardingIfNeeded()
         CrashPrompt.showIfNeeded()
 

@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-enum SessionActivity {
+enum SessionActivity: String, Codable {
     case idle, working, attention
 
     var label: String {
@@ -34,7 +34,7 @@ enum AggregateState {
     }
 }
 
-struct Session: Identifiable {
+struct Session: Identifiable, Codable {
     let id: String            // payload.session_id
     var cwd: String
     var activity: SessionActivity

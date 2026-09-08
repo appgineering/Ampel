@@ -106,9 +106,17 @@ private struct HooksStep: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if installed {
-                Label("Hooks installed. New sessions will show up automatically.",
-                      systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Hooks installed. New sessions will show up automatically.",
+                          systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    // Claude Code snapshots its hook config at session start, so a
+                    // session that was already running keeps firing nothing.
+                    Text("Claude Code sessions that are already running will not appear until you restart them, or run /hooks in them.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else if working {
                 HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Installing…") }
             } else {

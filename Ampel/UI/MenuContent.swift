@@ -28,7 +28,7 @@ struct MenuContent: View {
                 .font(.headline)
 
             if store.sessions.isEmpty {
-                Text("Start a Claude Code session to see it here.")
+                Text("Start a Claude Code session to see it here. Sessions that were already running when the hooks were installed need a restart, or /hooks, before Ampel sees them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

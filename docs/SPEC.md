@@ -12,6 +12,8 @@ Claude Code hooks are shell commands configured in `~/.claude/settings.json`, ex
 
 Deliberate decision: **file spool, no localhost server.** It works when the app launches after sessions started, survives app restarts, loses nothing while the app is closed, and the hook path has zero dependencies (no jq, no python, no curl).
 
+The spool only carries events the app has yet to consume, so it cannot on its own tell a freshly launched Ampel about sessions whose events were already drained by a previous run. Live sessions are therefore mirrored to `~/.ampel/sessions.json` on every change and reloaded at launch, then swept for staleness immediately, so a relaunch does not blank the menu until the next hook fires.
+
 ## 2. Hook contract
 
 ### 2.1 Script `~/.ampel/bin/ampel-hook` (mode 755)

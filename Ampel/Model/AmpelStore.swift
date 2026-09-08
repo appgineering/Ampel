@@ -16,6 +16,37 @@ final class AmpelStore {
     @ObservationIgnored
     private let log = Log("store")
 
+    /// Where the live sessions are mirrored, so quitting and relaunching Ampel
+    /// does not lose every session that is mid-flight. Nil in tests, which want
+    /// an empty store and no side effects on the real spool.
+    @ObservationIgnored
+    private let stateURL: URL?
+
+    static var defaultStateURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".ampel/sessions.json")
+    }
+
+    init(stateURL: URL? = nil) {
+        self.stateURL = stateURL
+        guard let stateURL,
+              let data = try? Data(contentsOf: stateURL),
+              let saved = try? JSONDecoder().decode([String: Session].self, from: data)
+        else { return }
+        sessions = saved
+        log.info("restored \(saved.count) session(s) from disk")
+        // A session that was already dead when we quit must not come back.
+        sweepStale()
+    }
+
+    private func save() {
+        guard let stateURL else { return }
+        guard let data = try? JSONEncoder().encode(sessions) else { return }
+        try? FileManager.default.createDirectory(
+            at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: stateURL, options: .atomic)
+    }
+
     var aggregate: AggregateState {
         if sessions.isEmpty { return .off }
         if sessions.values.contains(where: { $0.activity == .attention }) { return .attention }
@@ -52,6 +83,7 @@ final class AmpelStore {
         if envelope.event == "SessionEnd" {
             log.info("\(id) SessionEnd, removing")
             sessions.removeValue(forKey: id)
+            save()
             return
         }
 
@@ -85,6 +117,8 @@ final class AmpelStore {
 
         log.info("\(id) \(envelope.event) -> \(String(describing: activity)) (\(self.sessions.count) live)")
 
+        save()
+
         if activity == .attention && previous?.activity != .attention {
             onAttention?(session)
         }
@@ -96,6 +130,7 @@ final class AmpelStore {
         session.lastActivity = Date(timeIntervalSince1970: TimeInterval(envelope.receivedAt))
         if let cwd = envelope.payload.cwd { session.cwd = cwd }
         sessions[id] = session
+        save()
     }
 
     func sweepStale(olderThan interval: TimeInterval = 6 * 3600) {
@@ -105,5 +140,6 @@ final class AmpelStore {
             log.info("sweeping stale session \(id)")
             sessions.removeValue(forKey: id)
         }
+        if !dead.isEmpty { save() }
     }
 }
