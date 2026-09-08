@@ -35,6 +35,29 @@ struct PlanUsage: Codable, Equatable, Sendable {
         return parse(root, capturedAt: modified)
     }
 
+    /// Claude Code omits a window from the payload at the moment that window
+    /// resets, and `usage.json` only changes when a session renders its
+    /// statusline, so a plain replace makes the row vanish for the whole idle
+    /// stretch that follows. Carry each window over from the previous reading
+    /// instead: one still running keeps its figure, and one whose reset time
+    /// has passed comes back at zero, which is what a reset window is.
+    func merging(over previous: PlanUsage?, now: Date = Date()) -> PlanUsage {
+        guard let previous else { return self }
+        var merged = self
+        merged.fiveHour = fiveHour ?? Self.carried(previous.fiveHour, now: now)
+        merged.sevenDay = sevenDay ?? Self.carried(previous.sevenDay, now: now)
+        merged.spendLimit = spendLimit ?? Self.carried(previous.spendLimit, now: now)
+        return merged
+    }
+
+    /// The new window's reset time is unknown until Claude Code reports it, so
+    /// a reset window carries none rather than the stale one.
+    private static func carried(_ window: Window?, now: Date) -> Window? {
+        guard let window else { return nil }
+        guard let resets = window.resetsAt else { return window }
+        return resets > now ? window : Window(usedPercentage: 0, resetsAt: nil)
+    }
+
     static func parse(_ root: [String: Any], capturedAt: Date) -> PlanUsage? {
         let limits = root["rate_limits"] as? [String: Any] ?? [:]
         func window(_ key: String) -> Window? {

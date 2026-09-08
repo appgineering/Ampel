@@ -80,7 +80,7 @@ final class UsageProvider {
     /// minute and never blocks what is already on screen.
     func refresh() {
         var current = snapshot ?? UsageSnapshot(todayCost: 0)
-        current.plan = PlanUsage.read()
+        current.plan = PlanUsage.read()?.merging(over: current.plan)
         snapshot = current
 
         if let lastFetched, Date().timeIntervalSince(lastFetched) < cacheLifetime { return }

@@ -193,13 +193,15 @@ private struct UsageSection: View {
     }
 
     /// Reserved so the popover does not resize when the numbers land. Plan
-    /// usage can show a third bar, so it gets measured rather than guessed.
+    /// usage can show one to three bars, so it gets measured rather than
+    /// guessed: reserving a flat two left a hole under a lone bar.
     private var reservedHeight: CGFloat {
         if style == .text { return CGFloat((planLines ?? estimateLines).count) * 17 }
+        // No plan yet means the estimate fallback, which is always two bars.
         let bars = usage?.plan.map { plan in
             [plan.fiveHour, plan.sevenDay, plan.spendLimit].compactMap { $0 }.count
         } ?? 2
-        return CGFloat(max(bars, 2)) * 31
+        return CGFloat(max(bars, 1)) * 31
     }
 
     /// Real plan figures as plain lines, for the numbers-only style.

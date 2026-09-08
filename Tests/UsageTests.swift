@@ -120,6 +120,49 @@ final class UsageTests: XCTestCase {
         XCTAssertNil(partial?.sevenDay?.resetsAt, "resets_at is optional too")
     }
 
+    /// The bug this guards: at 21:50 the five hour window reset, Claude Code
+    /// dropped it from the payload, and the Session row disappeared until the
+    /// next statusline write, which on an idle machine never came.
+    func testAWindowDroppedAtResetIsCarriedOver() throws {
+        let future = Date().addingTimeInterval(3600)
+        let previous = PlanUsage(fiveHour: .init(usedPercentage: 1, resetsAt: future),
+                                 sevenDay: .init(usedPercentage: 43, resetsAt: future),
+                                 spendLimit: nil, capturedAt: Date())
+        // The payload Claude Code writes at the moment the window resets.
+        let dropped = try XCTUnwrap(PlanUsage.parse(
+            try object(#"{"rate_limits":{"seven_day":{"used_percentage":43}}}"#), capturedAt: Date()))
+
+        let merged = dropped.merging(over: previous)
+        XCTAssertEqual(merged.fiveHour?.usedPercentage, 1, "a running window keeps its figure")
+        XCTAssertEqual(merged.fiveHour?.resetsAt, future)
+        XCTAssertEqual(merged.sevenDay?.usedPercentage, 43, "the reported window still wins")
+    }
+
+    func testACarriedWindowPastItsResetComesBackAtZero() throws {
+        let past = Date().addingTimeInterval(-60)
+        let previous = PlanUsage(fiveHour: .init(usedPercentage: 97, resetsAt: past),
+                                 sevenDay: nil, spendLimit: nil, capturedAt: Date())
+        let dropped = try XCTUnwrap(PlanUsage.parse(
+            try object(#"{"rate_limits":{"seven_day":{"used_percentage":8}}}"#), capturedAt: Date()))
+
+        let merged = dropped.merging(over: previous)
+        XCTAssertEqual(merged.fiveHour?.usedPercentage, 0, "a window past its reset is at zero")
+        XCTAssertNil(merged.fiveHour?.resetsAt, "the new reset time is not known yet")
+    }
+
+    func testMergingKeepsReportedValuesAndNeedsNoPrevious() throws {
+        let fresh = try XCTUnwrap(PlanUsage.parse(
+            try object(#"{"rate_limits":{"five_hour":{"used_percentage":0,"resets_at":1788915000}}}"#),
+            capturedAt: Date()))
+        XCTAssertEqual(fresh.merging(over: nil).fiveHour?.usedPercentage, 0,
+                       "a just-reset window reporting zero is not mistaken for absent")
+
+        let previous = PlanUsage(fiveHour: .init(usedPercentage: 55, resetsAt: Date().addingTimeInterval(60)),
+                                 sevenDay: nil, spendLimit: nil, capturedAt: Date())
+        XCTAssertEqual(fresh.merging(over: previous).fiveHour?.usedPercentage, 0,
+                       "a reported window is never overwritten by the carried one")
+    }
+
     func testSnapshotSurvivesEncodingForTheCache() throws {
         let blocks = try object("""
         {"blocks":[{"isActive":true,"costUSD":3.5,"totalTokens":100,
