@@ -19,7 +19,7 @@ ZIP="dist/Ampel-$VERSION.zip"
 [ -z "$(git status --porcelain)" ] || { echo "working tree is dirty"; exit 1; }
 
 echo "==> version"
-/usr/bin/sed -i '' "s/CFBundleShortVersionString: \"[^\"]*\"/CFBundleShortVersionString: \\"$VERSION\\"/" project.yml
+/usr/bin/sed -i '' -E "s/(CFBundleShortVersionString: )\"[^\"]*\"/\\1\"$VERSION\"/" project.yml
 # yyyymmdd##, counted from the previous value, so it resets each day.
 BUILD=$(./Tools/next_build_number.py --write)
 echo "    $VERSION build $BUILD"
