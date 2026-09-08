@@ -7,6 +7,11 @@ import os
 final class AmpelStore {
     private(set) var sessions: [String: Session] = [:]
 
+    /// Tools that put a prompt on screen and wait for the person to answer.
+    /// Claude Code sends no Notification for these, so the only way to know a
+    /// human is being asked something is the tool name on PreToolUse.
+    static let blockingTools: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
+
     /// Called when a session transitions INTO `.attention` (SPEC §6).
     /// A closure rather than a direct dependency so the store stays testable
     /// outside an app bundle, where UNUserNotificationCenter is unavailable.
@@ -87,6 +92,24 @@ final class AmpelStore {
             return
         }
 
+        let previous = sessions[id]
+        var blockedOn = previous?.blockedOn
+        let tool = envelope.payload.toolName
+
+        // A tool that puts a prompt in front of the user blocks until they
+        // answer, and Claude Code fires no Notification for it: PreToolUse when
+        // the prompt appears and PostToolUse when it is answered are the only
+        // signals there are. Verified against the hook stream, and the docs
+        // list no notification_type for a pending question.
+        if envelope.event == "PreToolUse", let tool, Self.blockingTools.contains(tool) {
+            blockedOn = tool
+        } else if envelope.event == "UserPromptSubmit"
+                    || (envelope.event == "PostToolUse" && tool != nil && tool == blockedOn) {
+            // Answered, or the user typed instead of answering. Either way they
+            // are back, so nothing is waiting on them any more.
+            blockedOn = nil
+        }
+
         let activity: SessionActivity
         switch envelope.event {
         case "SessionStart", "Stop", "SubagentStop": activity = .idle
@@ -105,21 +128,26 @@ final class AmpelStore {
             return
         }
 
+        // A prompt still on screen outranks whatever else the session is doing.
+        // Without this a backgrounded agent finishing fires SubagentStop and
+        // turns the light green while the question is still waiting.
+        let resolved: SessionActivity = blockedOn == nil ? activity : .attention
+
         let at = Date(timeIntervalSince1970: TimeInterval(envelope.receivedAt))
-        let previous = sessions[id]
-        var session = previous ?? Session(id: id, cwd: "", activity: activity, lastActivity: at, lastMessage: nil)
-        session.activity = activity
+        var session = previous ?? Session(id: id, cwd: "", activity: resolved, lastActivity: at, lastMessage: nil)
+        session.activity = resolved
         session.lastActivity = at
+        session.blockedOn = blockedOn
         if let cwd = envelope.payload.cwd { session.cwd = cwd }
         // Keep the message only while it is the reason we are red.
-        session.lastMessage = activity == .attention ? envelope.payload.message : nil
+        session.lastMessage = resolved == .attention ? envelope.payload.message : nil
         sessions[id] = session
 
-        log.info("\(id) \(envelope.event) -> \(String(describing: activity)) (\(self.sessions.count) live)")
+        log.info("\(id) \(envelope.event) -> \(String(describing: resolved)) (\(self.sessions.count) live)")
 
         save()
 
-        if activity == .attention && previous?.activity != .attention {
+        if resolved == .attention && previous?.activity != .attention {
             onAttention?(session)
         }
     }

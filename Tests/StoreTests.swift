@@ -6,13 +6,61 @@ import XCTest
 final class StoreTests: XCTestCase {
     private func envelope(_ event: String, _ id: String, cwd: String = "/tmp/proj",
                           message: String? = nil, notificationType: String? = nil,
-                          at: Int = 1_000) throws -> HookEnvelope {
+                          tool: String? = nil, at: Int = 1_000) throws -> HookEnvelope {
         var payload: [String: Any] = ["session_id": id, "cwd": cwd]
         if let message { payload["message"] = message }
         if let notificationType { payload["notification_type"] = notificationType }
+        if let tool { payload["tool_name"] = tool }
         let root: [String: Any] = ["event": event, "received_at": at, "payload": payload]
         let data = try JSONSerialization.data(withJSONObject: root)
         return try JSONDecoder().decode(HookEnvelope.self, from: data)
+    }
+
+    // MARK: - A question waiting on the person
+
+    /// Claude Code sends no Notification when it puts a question on screen, so
+    /// the only evidence is PreToolUse naming the tool. Before this, the
+    /// session read "working" for as long as the prompt sat there unanswered.
+    func testAQuestionOnScreenGoesRed() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("PreToolUse", "a", tool: "Bash"))
+        XCTAssertEqual(store.aggregate, .working)
+
+        store.apply(try envelope("PreToolUse", "a", tool: "AskUserQuestion"))
+        XCTAssertEqual(store.aggregate, .attention)
+
+        store.apply(try envelope("PostToolUse", "a", tool: "AskUserQuestion"))
+        XCTAssertEqual(store.aggregate, .working, "answering releases it")
+    }
+
+    /// The observed failure: a backgrounded agent finished while the question
+    /// was still on screen, and SubagentStop turned the light green.
+    func testABackgroundAgentFinishingDoesNotClearAPendingQuestion() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("PreToolUse", "a", tool: "AskUserQuestion"))
+        XCTAssertEqual(store.aggregate, .attention)
+
+        // Everything a busy session emits while the person is still reading.
+        store.apply(try envelope("SubagentStop", "a"))
+        store.apply(try envelope("Stop", "a"))
+        store.apply(try envelope("PreToolUse", "a", tool: "WebFetch"))
+        store.apply(try envelope("PostToolUse", "a", tool: "WebFetch"))
+        store.apply(try envelope("Notification", "a", notificationType: "idle_prompt"))
+        XCTAssertEqual(store.aggregate, .attention, "the prompt is still waiting")
+
+        store.apply(try envelope("PostToolUse", "a", tool: "AskUserQuestion"))
+        XCTAssertEqual(store.aggregate, .working)
+    }
+
+    /// Escaping the prompt and typing instead never sends the PostToolUse that
+    /// would release it, so the light would otherwise stay red for good.
+    func testTypingInsteadOfAnsweringReleasesTheSession() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("PreToolUse", "a", tool: "ExitPlanMode"))
+        XCTAssertEqual(store.aggregate, .attention, "a plan awaiting approval blocks too")
+
+        store.apply(try envelope("UserPromptSubmit", "a"))
+        XCTAssertEqual(store.aggregate, .working)
     }
 
     func testStartsOff() {

@@ -83,7 +83,7 @@ Transition table, keyed by `session_id`:
 |---|---|
 | `SessionStart` | upsert session, `idle` |
 | `UserPromptSubmit` | `working` |
-| `PreToolUse` / `PostToolUse` | `working` |
+| `PreToolUse` / `PostToolUse` | `working`, except the blocking tools below |
 | `Notification` | `attention` when `notification_type` warrants it (below), store `message` |
 | `Stop` / `SubagentStop` | `idle` |
 | `SessionEnd` | remove session |
@@ -91,6 +91,12 @@ Transition table, keyed by `session_id`:
 The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …).
 
 Only notifications that represent a decision waiting on the user turn a session red: `permission_prompt`, `agent_needs_input`, and the `elicitation_*` dialogs. `idle_prompt` does not, because Claude Code fires it whenever a session sits at an empty prompt, which is most of the time a session is open and would pin the icon red permanently. A `Notification` with an unrecognised or absent `notification_type` is treated as needing attention, so a new blocking notification type shows up rather than being silently swallowed. `lastMessage` is cleared whenever a session leaves `attention`, so a green row never shows a stale "waiting for your input".
+
+### Deviation: a question on screen is not a `Notification`
+
+The spec above assumed `Notification` was the only route to `attention`. It is not. When Claude Code puts a question in front of the person with `AskUserQuestion`, or a plan for approval with `ExitPlanMode`, it fires **no** `Notification` at all. The only evidence is `PreToolUse` carrying `tool_name`, and the matching `PostToolUse` once they answer. Confirmed against a live hook stream and the hook reference, which lists no `notification_type` for a pending question.
+
+So a session is also `attention` while a blocking tool's prompt is open: `PreToolUse` naming a tool in `AmpelStore.blockingTools` sets `blockedOn`, and the session stays red until the matching `PostToolUse` arrives, or `UserPromptSubmit` does, which is what happens when the person dismisses the prompt and types instead. `blockedOn` outranks every other event, because a backgrounded agent finishing fires `SubagentStop` mid-question and would otherwise turn the light green with the question still on screen. That was the reported bug.
 
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 

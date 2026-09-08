@@ -40,6 +40,9 @@ struct Session: Identifiable, Codable {
     var activity: SessionActivity
     var lastActivity: Date
     var lastMessage: String?  // Notification payload "message", if present
+    /// The tool whose prompt is currently on screen, if one is. Decodes as nil
+    /// from a sessions.json written before this existed.
+    var blockedOn: String?
 
     var displayName: String {
         URL(fileURLWithPath: cwd).lastPathComponent
@@ -57,12 +60,14 @@ struct HookEnvelope: Decodable {
         let cwd: String?
         let message: String?
         let notificationType: String?
+        let toolName: String?
 
         enum CodingKeys: String, CodingKey {
             case sessionId = "session_id"
             case cwd
             case message
             case notificationType = "notification_type"
+            case toolName = "tool_name"
         }
 
         /// Notification types that do not represent a decision waiting on the
