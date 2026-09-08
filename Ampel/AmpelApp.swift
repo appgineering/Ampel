@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = store.aggregate
             _ = store.sessions.count
             _ = settings.iconStyle
+            _ = settings.iconScale
             _ = settings.pulseOnAttention
             // The ring style draws usage, so a refreshed snapshot must redraw.
             _ = controller?.usage.snapshot

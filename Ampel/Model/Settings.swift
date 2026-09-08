@@ -31,6 +31,12 @@ final class Settings {
         didSet { defaults.set(iconStyle.rawValue, forKey: Key.iconStyle) }
     }
 
+    /// Multiplies the 18pt icon canvas. Capped at 1.2 because the menu bar
+    /// clips anything taller than about 22pt.
+    var iconScale: Double {
+        didSet { defaults.set(iconScale, forKey: Key.iconScale) }
+    }
+
     var pulseOnAttention: Bool {
         didSet { defaults.set(pulseOnAttention, forKey: Key.pulse) }
     }
@@ -42,6 +48,7 @@ final class Settings {
     private enum Key {
         static let usageStyle = "usageStyle"
         static let iconStyle = "iconStyle"
+        static let iconScale = "iconScale"
         static let onboarded = "hasOnboarded"
         static let pulse = "pulseOnAttention"
         static let notify = "notifyOnAttention"
@@ -51,9 +58,10 @@ final class Settings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        defaults.register(defaults: [Key.pulse: true, Key.notify: true])
+        defaults.register(defaults: [Key.pulse: true, Key.notify: true, Key.iconScale: 1.0])
         usageStyle = UsageStyle(rawValue: defaults.string(forKey: Key.usageStyle) ?? "") ?? .bars
         iconStyle = IconStyle(rawValue: defaults.string(forKey: Key.iconStyle) ?? "") ?? .dot
+        iconScale = defaults.double(forKey: Key.iconScale)
         hasOnboarded = defaults.bool(forKey: Key.onboarded)
         pulseOnAttention = defaults.bool(forKey: Key.pulse)
         notifyOnAttention = defaults.bool(forKey: Key.notify)

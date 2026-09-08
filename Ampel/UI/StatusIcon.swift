@@ -45,8 +45,18 @@ enum IconStyle: String, CaseIterable, Identifiable, Sendable {
 enum StatusIcon {
     static let size = NSSize(width: 18, height: 18)
 
-    static func image(_ style: IconStyle, _ context: IconContext) -> NSImage {
-        let image = NSImage(size: size, flipped: false) { rect in
+    /// `scale` grows the canvas and the drawing with it, so every style keeps
+    /// its proportions and none of the per-style geometry has to know about it.
+    static func image(_ style: IconStyle, _ context: IconContext, scale: Double = 1) -> NSImage {
+        let scale = min(max(scale, 0.7), 1.2)
+        let canvas = NSSize(width: size.width * scale, height: size.height * scale)
+        let image = NSImage(size: canvas, flipped: false) { _ in
+            let rect = NSRect(origin: .zero, size: size)
+            if scale != 1 {
+                let transform = NSAffineTransform()
+                transform.scale(by: scale)
+                transform.concat()
+            }
             switch style {
             case .dot: drawDot(rect, context)
             case .horizontal: drawHorizontal(rect, context)

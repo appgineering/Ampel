@@ -34,7 +34,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.delegate = self
 
         if let button = statusItem.button {
-            button.image = StatusIcon.image(settings.iconStyle, IconContext())
+            button.image = StatusIcon.image(settings.iconStyle, IconContext(), scale: settings.iconScale)
             button.target = self
             button.action = #selector(togglePopover)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -47,6 +47,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// them actually changed.
     private struct RenderKey: Equatable {
         var style: IconStyle
+        var scale: Double
         var aggregate: AggregateState
         var colors: [NSColor]
         var progress: Double?
@@ -63,6 +64,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let sessions = store.sortedSessions
         let key = RenderKey(
             style: settings.iconStyle,
+            scale: settings.iconScale,
             aggregate: store.aggregate,
             colors: sessions.map(\.activity.color),
             progress: progress,
@@ -77,7 +79,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             aggregate: key.aggregate,
             sessionColors: key.colors,
             progress: key.progress,
-            attentionCount: key.attention))
+            attentionCount: key.attention), scale: key.scale)
 
         guard key.pulsing != wasPulsing else { return }
         button.layer?.removeAnimation(forKey: Self.pulseKey)
