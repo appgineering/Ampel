@@ -85,7 +85,7 @@ Transition table, keyed by `session_id`:
 | `UserPromptSubmit` | `working` |
 | `PreToolUse` / `PostToolUse` | `working`, except the blocking tools below |
 | `Notification` | `attention` when `notification_type` warrants it (below), store `message` |
-| `Stop` / `SubagentStop` | `idle` |
+| `Stop` / `SubagentStop` | `idle`, or `working` while background agents are still running (below) |
 | `SessionEnd` | remove session |
 
 The `Notification` payload carries both `message` (human-readable, e.g. "Claude is waiting for your input") and `notification_type` (`permission_prompt`, `idle_prompt`, `agent_needs_input`, …).
@@ -97,6 +97,18 @@ Only notifications that represent a decision waiting on the user turn a session 
 The spec above assumed `Notification` was the only route to `attention`. It is not. When Claude Code puts a question in front of the person with `AskUserQuestion`, or a plan for approval with `ExitPlanMode`, it fires **no** `Notification` at all. The only evidence is `PreToolUse` carrying `tool_name`, and the matching `PostToolUse` once they answer. Confirmed against a live hook stream and the hook reference, which lists no `notification_type` for a pending question.
 
 So a session is also `attention` while a blocking tool's prompt is open: `PreToolUse` naming a tool in `AmpelStore.blockingTools` sets `blockedOn`, and the session stays red until the matching `PostToolUse` arrives, or `UserPromptSubmit` does, which is what happens when the person dismisses the prompt and types instead. `blockedOn` outranks every other event, because a backgrounded agent finishing fires `SubagentStop` mid-question and would otherwise turn the light green with the question still on screen. That was the reported bug.
+
+### Deviation: a stopped turn with agents still running is not idle
+
+The table above originally sent every `Stop` and `SubagentStop` to `idle`. A main turn that hands work to background agents stops straight away, with Claude Code showing "Waiting for 3 background agents to finish", and the light went green while the session was at its busiest. That was the reported bug.
+
+Both payloads carry `background_tasks`, a list of `{id, type, status, description}`. The session stays `working` while any entry is `running` with a `type` of `subagent` or `workflow`, and that count is kept as `backgroundAgents` and shown in the session row ("Working · 3 background agents"). Verified against a recorded hook stream:
+
+- `shell` and `monitor` entries are not counted. A background shell is usually a dev server and a monitor a passive watch, both of which outlive the work and would hold the session yellow for as long as it stays open.
+- A background agent's own `SubagentStop` still lists that agent as `running`, so the entry whose `id` equals the payload's `agent_id` is excluded.
+- Every listed agent did fire a `SubagentStop` later, so the list does not go stale. When the last one finishes the session goes `idle`, then Claude Code wakes the main turn with a `UserPromptSubmit` carrying a `<task-notification>` (typically within seconds), and the closing `Stop` settles it.
+
+`backgroundAgents` is cleared on `UserPromptSubmit` and `SessionStart`, because the count is only known at a stop.
 
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 

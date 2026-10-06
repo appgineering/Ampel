@@ -110,10 +110,24 @@ final class AmpelStore {
             blockedOn = nil
         }
 
+        var backgroundAgents = previous?.backgroundAgents
         let activity: SessionActivity
         switch envelope.event {
-        case "SessionStart", "Stop", "SubagentStop": activity = .idle
-        case "UserPromptSubmit", "PreToolUse", "PostToolUse": activity = .working
+        case "SessionStart":
+            backgroundAgents = nil
+            activity = .idle
+        case "Stop", "SubagentStop":
+            // The main turn ending is not the session going quiet: agents it
+            // left running in the background are still working, and Claude
+            // Code wakes the main turn again when they report back.
+            let running = envelope.payload.runningBackgroundAgents
+            backgroundAgents = running > 0 ? running : nil
+            activity = running > 0 ? .working : .idle
+        case "UserPromptSubmit":
+            // The count is only known at a stop, so it is stale from here on.
+            backgroundAgents = nil
+            activity = .working
+        case "PreToolUse", "PostToolUse": activity = .working
         case "Notification":
             // Only a decision waiting on the user goes red. Claude Code also
             // fires Notification when a session merely sits at an empty
@@ -138,6 +152,7 @@ final class AmpelStore {
         session.activity = resolved
         session.lastActivity = at
         session.blockedOn = blockedOn
+        session.backgroundAgents = backgroundAgents
         if let cwd = envelope.payload.cwd { session.cwd = cwd }
         // Keep the message only while it is the reason we are red.
         session.lastMessage = resolved == .attention ? envelope.payload.message : nil

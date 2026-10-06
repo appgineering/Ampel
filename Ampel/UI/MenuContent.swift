@@ -114,7 +114,7 @@ private struct SessionRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(disambiguate ? "\(session.activity.label) · \(session.id.prefix(6))" : session.activity.label)
+                Text(disambiguate ? "\(session.stateLabel) · \(session.id.prefix(6))" : session.stateLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let message = session.lastMessage {

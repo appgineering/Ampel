@@ -6,11 +6,14 @@ import XCTest
 final class StoreTests: XCTestCase {
     private func envelope(_ event: String, _ id: String, cwd: String = "/tmp/proj",
                           message: String? = nil, notificationType: String? = nil,
-                          tool: String? = nil, at: Int = 1_000) throws -> HookEnvelope {
+                          tool: String? = nil, agent: String? = nil,
+                          tasks: [[String: String]]? = nil, at: Int = 1_000) throws -> HookEnvelope {
         var payload: [String: Any] = ["session_id": id, "cwd": cwd]
         if let message { payload["message"] = message }
         if let notificationType { payload["notification_type"] = notificationType }
         if let tool { payload["tool_name"] = tool }
+        if let agent { payload["agent_id"] = agent }
+        if let tasks { payload["background_tasks"] = tasks }
         let root: [String: Any] = ["event": event, "received_at": at, "payload": payload]
         let data = try JSONSerialization.data(withJSONObject: root)
         return try JSONDecoder().decode(HookEnvelope.self, from: data)
@@ -61,6 +64,52 @@ final class StoreTests: XCTestCase {
 
         store.apply(try envelope("UserPromptSubmit", "a"))
         XCTAssertEqual(store.aggregate, .working)
+    }
+
+    // MARK: - Background agents
+
+    private func task(_ id: String, _ type: String = "subagent") -> [String: String] {
+        ["id": id, "type": type, "status": "running", "description": "x"]
+    }
+
+    /// The observed failure: the main turn stopped with "Waiting for 3
+    /// background agents to finish" on screen, and the light went green.
+    func testAStoppedTurnWithBackgroundAgentsIsStillWorking() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("UserPromptSubmit", "a"))
+        store.apply(try envelope("Stop", "a", tasks: [task("x"), task("y"), task("z")]))
+        XCTAssertEqual(store.aggregate, .working)
+        XCTAssertEqual(store.sessions["a"]?.stateLabel, "Working · 3 background agents")
+
+        // A background agent's own SubagentStop still lists it as running.
+        store.apply(try envelope("SubagentStop", "a", agent: "x", tasks: [task("x"), task("y"), task("z")]))
+        XCTAssertEqual(store.sessions["a"]?.backgroundAgents, 2)
+        store.apply(try envelope("SubagentStop", "a", agent: "y", tasks: [task("y"), task("z")]))
+        XCTAssertEqual(store.sessions["a"]?.stateLabel, "Working · 1 background agent")
+
+        store.apply(try envelope("SubagentStop", "a", agent: "z", tasks: [task("z")]))
+        XCTAssertEqual(store.aggregate, .idle, "the last one finishing leaves nothing running")
+        XCTAssertEqual(store.sessions["a"]?.stateLabel, "Idle")
+    }
+
+    /// A dev server or a passive watch outlives the work. Counting them would
+    /// hold the session yellow for as long as it stays open.
+    func testBackgroundShellsAndMonitorsDoNotHoldASessionBusy() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("Stop", "a", tasks: [task("s", "shell"), task("m", "monitor")]))
+        XCTAssertEqual(store.aggregate, .idle)
+
+        store.apply(try envelope("Stop", "a", tasks: [task("s", "shell"), task("w", "workflow")]))
+        XCTAssertEqual(store.sessions["a"]?.backgroundAgents, 1)
+    }
+
+    /// The field is new and its shape is not ours. A Stop must still land.
+    func testAMalformedTaskListDoesNotLoseTheStop() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("UserPromptSubmit", "a"))
+        store.apply(try JSONDecoder().decode(HookEnvelope.self, from: Data(
+            #"{"event":"Stop","received_at":1,"payload":{"session_id":"a","background_tasks":"nope"}}"#.utf8)))
+        XCTAssertEqual(store.aggregate, .idle)
     }
 
     func testStartsOff() {
