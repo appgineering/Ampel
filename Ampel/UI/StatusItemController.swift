@@ -131,6 +131,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 rootView: MenuContent(store: store,
                                       settings: settings,
                                       provider: usage,
+                                      jump: { [popover] terminal in
+                                          popover.performClose(nil)
+                                          TerminalJump.activate(terminal)
+                                      },
                                       openSettings: { [settingsWindow] in settingsWindow.show() },
                                       openAbout: { [settingsWindow] in settingsWindow.showAbout() }))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)

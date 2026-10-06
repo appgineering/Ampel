@@ -136,6 +136,51 @@ final class InstallerTests: XCTestCase {
         XCTAssertTrue(installer.isInstalled)
     }
 
+    /// An update that changes the envelope has to reach installs that already
+    /// have a script, and nothing else would ever rewrite it.
+    func testReplacesAScriptLeftByAnOlderVersion() throws {
+        let installer = HookInstaller(home: home)
+        try installer.install()
+        let script = home.appendingPathComponent(".ampel/bin/ampel-hook")
+        try "#!/bin/bash\nexit 0\n".write(to: script, atomically: true, encoding: .utf8)
+
+        installer.repairIfNeeded()
+        XCTAssertEqual(try String(contentsOf: script, encoding: .utf8), HookInstaller.script)
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: script.path))
+    }
+
+    /// The script is the only code that runs inside Claude Code, so run it for
+    /// real: one well formed envelope, silence, and exit 0 (CLAUDE.md rule 4).
+    func testTheScriptWritesAnEnvelopeNamingTheTerminalAndStaysSilent() throws {
+        try HookInstaller(home: home).install()
+        for (bundle, expected) in [("com.example.Term", "com.example.Term"), ("a\"b\\c", "abc"), (nil, "")] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [home.appendingPathComponent(".ampel/bin/ampel-hook").path, "Stop"]
+            var environment = ["HOME": home.path, "PATH": "/usr/bin:/bin"]
+            environment["__CFBundleIdentifier"] = bundle
+            process.environment = environment
+            let input = Pipe(), output = Pipe()
+            process.standardInput = input
+            process.standardOutput = output
+            process.standardError = output
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"session_id":"a"}"#.utf8))
+            input.fileHandleForWriting.closeFile()
+            process.waitUntilExit()
+
+            XCTAssertEqual(process.terminationStatus, 0)
+            XCTAssertEqual(output.fileHandleForReading.readDataToEndOfFile(), Data())
+            let events = home.appendingPathComponent(".ampel/events")
+            let files = try FileManager.default.contentsOfDirectory(at: events, includingPropertiesForKeys: nil)
+            let file = try XCTUnwrap(files.first)
+            let envelope = try JSONDecoder().decode(HookEnvelope.self, from: Data(contentsOf: file))
+            XCTAssertEqual(envelope.terminal, expected)
+            XCTAssertEqual(envelope.payload.sessionId, "a")
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+
     func testDoesNotWriteAScriptNobodyAskedFor() throws {
         HookInstaller(home: home).repairIfNeeded()
         XCTAssertFalse(FileManager.default.fileExists(

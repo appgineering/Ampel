@@ -26,7 +26,9 @@ dir="$HOME/.ampel/events"
 mkdir -p "$dir"
 payload="$(cat)"
 [ -z "$payload" ] && payload='{}'
-envelope="$(printf '{"event":"%s","received_at":%s,"payload":%s}' "$1" "$(date +%s)" "$payload")"
+terminal="${__CFBundleIdentifier:-}"
+terminal="${terminal//[^A-Za-z0-9._-]/}"
+envelope="$(printf '{"event":"%s","received_at":%s,"terminal":"%s","payload":%s}' "$1" "$(date +%s)" "$terminal" "$payload")"
 tmp="$dir/.tmp-$$-$RANDOM"
 printf '%s' "$envelope" > "$tmp"
 mv "$tmp" "$dir/$(date +%s)-$$-$RANDOM.json"
@@ -60,8 +62,12 @@ The app deletes each spool file once applied, so a sequence of events cannot be 
 ### 2.3 Envelope format
 
 ```json
-{ "event": "Stop", "received_at": 1725690000, "payload": { "session_id": "…", "cwd": "/Users/kevin/dev/foo", "hook_event_name": "Stop", "…": "…" } }
+{ "event": "Stop", "received_at": 1725690000, "terminal": "com.mitchellh.ghostty", "payload": { "session_id": "…", "cwd": "/Users/kevin/dev/foo", "hook_event_name": "Stop", "…": "…" } }
 ```
+
+`terminal` is `__CFBundleIdentifier` from the hook's environment: the bundle id of the GUI app the session's process tree was launched from (a terminal, or an editor with a built in one). It is stripped to `[A-Za-z0-9._-]` before being written, so it cannot break the JSON, and is empty when the variable is unset, as over SSH. The store keeps the last non-empty value per session as `Session.terminal`.
+
+`HookInstaller.repairIfNeeded()` runs at launch and rewrites the installed script when it differs from the one the app carries, provided the hooks are still registered. That is how a changed script reaches an existing install.
 
 ## 3. State model
 
@@ -140,11 +146,11 @@ The popover's hosting controller is rebuilt on every open. Kept alive across ope
 Content top to bottom:
 
 1. Header: aggregate summary ("1 session needs attention" / "2 sessions working" / "All quiet").
-2. Session rows: colored dot, project name, state label, relative time ("2m ago"). `attention` sessions sorted first; show `lastMessage` as secondary line when present.
+2. Session rows: colored dot, project name, state label, relative time ("2m ago"). `attention` sessions sorted first; show `lastMessage` as secondary line when present. Clicking a row whose session has a `terminal` closes the popover and brings that app to the front (`TerminalJump`, via `NSWorkspace.openApplication`). It activates the app, not the window or tab: exact focus would need per-terminal scripting and an Automation permission prompt.
 3. Divider, usage section (§7).
 4. Footer: "Settings…", "About", "Quit". "Install hooks…" appears above them only when setup is incomplete (§8). Launch at Login and the display preferences live in the settings window, not the popover.
 
-macOS notification (`UNUserNotificationCenter`) when a session transitions INTO `attention`: title = project name, body = payload `message` or "Claude needs your attention". Debounce: max one per session per 30s. No notifications for any other transition.
+macOS notification (`UNUserNotificationCenter`) when a session transitions INTO `attention`: title = project name, body = payload `message` or "Claude needs your attention". Debounce: max one per session per 30s. Clicking a notification brings the session's terminal to the front, the same as clicking its row.
 
 ## 7. Usage section
 

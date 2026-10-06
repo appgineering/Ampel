@@ -46,6 +46,10 @@ struct Session: Identifiable, Codable {
     /// Background agents still running after the main turn stopped. Nil when
     /// there are none, and from a sessions.json written before this existed.
     var backgroundAgents: Int?
+    /// Bundle id of the app the session runs in, which is what a click on the
+    /// row brings to the front. Nil until the first event from a hook script
+    /// new enough to report it.
+    var terminal: String?
 
     /// The row's state line. A session that stopped but is waiting on its
     /// background agents says so, since "Working" alone hides why.
@@ -63,6 +67,8 @@ struct Session: Identifiable, Codable {
 struct HookEnvelope: Decodable {
     let event: String
     let receivedAt: Int
+    /// `__CFBundleIdentifier` as the hook saw it. Empty outside a GUI app.
+    let terminal: String?
     let payload: Payload
 
     struct Payload: Decodable {
@@ -134,6 +140,7 @@ struct HookEnvelope: Decodable {
     enum CodingKeys: String, CodingKey {
         case event
         case receivedAt = "received_at"
+        case terminal
         case payload
     }
 }

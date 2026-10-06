@@ -4,12 +4,14 @@ import UserNotifications
 import os
 
 /// One macOS notification per session transition into `attention`, at most one
-/// per session per 30 seconds. See SPEC §6. Nothing else notifies.
+/// per session per 30 seconds. See SPEC §6. Clicking one brings the session's
+/// terminal to the front.
 @MainActor
-final class Notifier {
+final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private let log = Log("ui")
     private let debounce: TimeInterval = 30
     private var lastSent: [String: Date] = [:]
+    private nonisolated static let terminalKey = "terminal"
 
     /// The icon to the left of a notification belongs to LaunchServices and
     /// cannot be set from here, so the app icon rides along as an attachment.
@@ -27,6 +29,8 @@ final class Notifier {
     }
 
     func requestAuthorization() {
+        // The delegate has to be in place before a click can be delivered.
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error { self.log.error("notification authorization failed: \(error.localizedDescription)") }
             else if !granted { self.log.info("notification authorization denied") }
@@ -36,16 +40,43 @@ final class Notifier {
     func notify(_ session: Session) {
         if let last = lastSent[session.id], Date().timeIntervalSince(last) < debounce { return }
         lastSent[session.id] = Date()
+        post(title: session.displayName,
+             body: session.lastMessage ?? "Claude needs your attention",
+             terminal: session.terminal)
+    }
 
+    /// `terminal` is the bundle id a click should bring to the front, if any.
+    func post(title: String, body: String, terminal: String? = nil) {
         let content = UNMutableNotificationContent()
-        content.title = session.displayName
-        content.body = session.lastMessage ?? "Claude needs your attention"
+        content.title = title
+        content.body = body
         content.sound = .default
+        if let terminal { content.userInfo = [Self.terminalKey: terminal] }
         if let icon = iconAttachment() { content.attachments = [icon] }
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error { self.log.error("notification failed: \(error.localizedDescription)") }
         }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let terminal = response.notification.request.content.userInfo[Self.terminalKey] as? String
+        completionHandler()
+        guard let terminal else { return }
+        Task { @MainActor in TerminalJump.activate(terminal) }
+    }
+
+    /// With a delegate set, a notification that arrives while Ampel is the
+    /// active app (its settings window is open) is dropped unless this says
+    /// otherwise.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 }

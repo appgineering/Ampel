@@ -7,16 +7,33 @@ final class StoreTests: XCTestCase {
     private func envelope(_ event: String, _ id: String, cwd: String = "/tmp/proj",
                           message: String? = nil, notificationType: String? = nil,
                           tool: String? = nil, agent: String? = nil,
-                          tasks: [[String: String]]? = nil, at: Int = 1_000) throws -> HookEnvelope {
+                          tasks: [[String: String]]? = nil, terminal: String? = nil,
+                          at: Int = 1_000) throws -> HookEnvelope {
         var payload: [String: Any] = ["session_id": id, "cwd": cwd]
         if let message { payload["message"] = message }
         if let notificationType { payload["notification_type"] = notificationType }
         if let tool { payload["tool_name"] = tool }
         if let agent { payload["agent_id"] = agent }
         if let tasks { payload["background_tasks"] = tasks }
-        let root: [String: Any] = ["event": event, "received_at": at, "payload": payload]
+        var root: [String: Any] = ["event": event, "received_at": at, "payload": payload]
+        if let terminal { root["terminal"] = terminal }
         let data = try JSONSerialization.data(withJSONObject: root)
         return try JSONDecoder().decode(HookEnvelope.self, from: data)
+    }
+
+    // MARK: - The terminal a session runs in
+
+    /// A hook run outside a GUI app reports an empty string, and an envelope
+    /// from an older script reports nothing. Neither may forget the terminal.
+    func testRemembersTheTerminalAcrossEventsThatDoNotNameOne() throws {
+        let store = AmpelStore()
+        store.apply(try envelope("SessionStart", "a"))
+        XCTAssertNil(store.sessions["a"]?.terminal)
+
+        store.apply(try envelope("UserPromptSubmit", "a", terminal: "com.mitchellh.ghostty"))
+        store.apply(try envelope("Stop", "a", terminal: ""))
+        store.apply(try envelope("UserPromptSubmit", "a"))
+        XCTAssertEqual(store.sessions["a"]?.terminal, "com.mitchellh.ghostty")
     }
 
     // MARK: - A question waiting on the person

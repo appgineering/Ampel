@@ -23,6 +23,8 @@ Red means Claude is blocked on a decision from you. Claude Code also fires a not
 
 Claude Code hooks (configured in `~/.claude/settings.json`) fire a tiny shell script on lifecycle events. The script drops one JSON file per event into `~/.ampel/events/`. Ampel.app watches that directory, updates per-session state, and renders the aggregate as a colored menu bar icon. No local server, no dependencies in the hook path.
 
+Click a session in the menu, or the notification it raised, to bring its terminal to the front. Ampel activates the app the session runs in, not the exact window or tab.
+
 ## Usage numbers
 
 Two sources, showing different things.

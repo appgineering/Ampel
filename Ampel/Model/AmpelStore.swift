@@ -154,6 +154,7 @@ final class AmpelStore {
         session.blockedOn = blockedOn
         session.backgroundAgents = backgroundAgents
         if let cwd = envelope.payload.cwd { session.cwd = cwd }
+        if let terminal = envelope.terminal, !terminal.isEmpty { session.terminal = terminal }
         // Keep the message only while it is the reason we are red.
         session.lastMessage = resolved == .attention ? envelope.payload.message : nil
         sessions[id] = session

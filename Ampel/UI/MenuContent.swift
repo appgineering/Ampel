@@ -6,6 +6,8 @@ struct MenuContent: View {
     var settings: Settings
     var provider: UsageProvider
 
+    /// Brings a session's terminal to the front and closes the popover.
+    var jump: (String) -> Void
     var openSettings: () -> Void
     var openAbout: () -> Void
 
@@ -40,7 +42,8 @@ struct MenuContent: View {
                         ForEach(store.sortedSessions) { session in
                             SessionRow(session: session,
                                        now: context.date,
-                                       disambiguate: ambiguousNames.contains(session.displayName))
+                                       disambiguate: ambiguousNames.contains(session.displayName),
+                                       jump: jump)
                         }
                     }
                 }
@@ -95,8 +98,23 @@ private struct SessionRow: View {
     let session: Session
     let now: Date
     let disambiguate: Bool
+    let jump: (String) -> Void
+
+    @State private var hovered = false
 
     var body: some View {
+        if let terminal = session.terminal {
+            Button { jump(terminal) } label: { content.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .background(.quaternary.opacity(hovered ? 1 : 0), in: RoundedRectangle(cornerRadius: 4))
+                .onHover { hovered = $0 }
+        } else {
+            // A session last heard from before the hook reported its terminal.
+            content
+        }
+    }
+
+    private var content: some View {
         HStack(alignment: .top, spacing: 8) {
             Circle()
                 .fill(Color(session.activity.color))

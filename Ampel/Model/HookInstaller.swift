@@ -45,10 +45,16 @@ final class HookInstaller {
     /// settings.json outlives ~/.ampel. If the hooks are still registered but
     /// the script they call is gone, every hook silently fails and Ampel goes
     /// blind, so put the script back rather than waiting to be asked.
+    ///
+    /// The same goes for a script left behind by an older Ampel: an update
+    /// that changes the envelope only reaches an existing install this way.
     func repairIfNeeded() {
-        guard !FileManager.default.isExecutableFile(atPath: scriptURL.path), hooksRegistered else { return }
+        guard hooksRegistered else { return }
+        let current = try? String(contentsOf: scriptURL, encoding: .utf8)
+        guard current != Self.script
+                || !FileManager.default.isExecutableFile(atPath: scriptURL.path) else { return }
         try? writeScript()
-        log.info("restored a missing hook script")
+        log.info(current == nil ? "restored a missing hook script" : "updated an outdated hook script")
     }
 
     private var hooksRegistered: Bool {
@@ -90,7 +96,9 @@ final class HookInstaller {
     mkdir -p "$dir"
     payload="$(cat)"
     [ -z "$payload" ] && payload='{}'
-    envelope="$(printf '{"event":"%s","received_at":%s,"payload":%s}' "$1" "$(date +%s)" "$payload")"
+    terminal="${__CFBundleIdentifier:-}"
+    terminal="${terminal//[^A-Za-z0-9._-]/}"
+    envelope="$(printf '{"event":"%s","received_at":%s,"terminal":"%s","payload":%s}' "$1" "$(date +%s)" "$terminal" "$payload")"
     tmp="$dir/.tmp-$$-$RANDOM"
     printf '%s' "$envelope" > "$tmp"
     mv "$tmp" "$dir/$(date +%s)-$$-$RANDOM.json"
