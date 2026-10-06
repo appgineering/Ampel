@@ -44,7 +44,8 @@ enum Diagnostics {
         }
 
         section("Preferences")
-        for key in ["iconStyle", "usageStyle", "pulseOnAttention", "notifyOnAttention", "hasOnboarded"] {
+        for key in ["iconStyle", "usageStyle", "pulseOnAttention", "notifyOnAttention", "notifyOnFinish",
+                    "warnOnUsage", "showUsageInMenuBar", "hasOnboarded"] {
             lines.append("  \(key): \(UserDefaults.standard.object(forKey: key) ?? "unset")")
         }
 
