@@ -79,9 +79,7 @@ final class UsageProvider {
     /// always current; ccusage is a subprocess, so it refreshes at most once a
     /// minute and never blocks what is already on screen.
     func refresh() {
-        var current = snapshot ?? UsageSnapshot(todayCost: 0)
-        current.plan = PlanUsage.read()?.merging(over: current.plan)
-        snapshot = current
+        refreshPlan()
 
         if let lastFetched, Date().timeIntervalSince(lastFetched) < cacheLifetime { return }
         guard !isRefreshing else { return }
@@ -93,6 +91,18 @@ final class UsageProvider {
             let result = Self.runCcusage(runner: runner, loginPath: loginPath)
             await MainActor.run { self.apply(result) }
         }
+    }
+
+    /// The plan half of a refresh on its own. Cheap enough for a timer, which
+    /// is what keeps the icon and the usage warning current while the menu
+    /// stays closed.
+    func refreshPlan() {
+        var current = snapshot ?? UsageSnapshot(todayCost: 0)
+        let plan = PlanUsage.read()?.merging(over: current.plan)
+        // Assigning an equal value would still wake every observer.
+        guard snapshot == nil || plan != current.plan else { return }
+        current.plan = plan
+        snapshot = current
     }
 
     private func apply(_ result: FetchResult) {

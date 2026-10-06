@@ -57,6 +57,8 @@ struct UsageSettingsView: View {
 
             Section {
                 Toggle("Show real plan usage", isOn: $planUsage)
+                Toggle("Notify when a limit passes \(Int(UsageWarning.threshold))%", isOn: $settings.warnOnUsage)
+                    .disabled(!planUsage)
                 if let failure {
                     Text(failure).font(.caption).foregroundStyle(.orange)
                 }

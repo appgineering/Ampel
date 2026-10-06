@@ -35,7 +35,7 @@ Two sources, showing different things.
 
 ## Settings
 
-A normal preferences window with General, Usage and About panes: launch at login, whether the icon pulses and whether blocked sessions raise a notification, how the usage section is drawn (bars, numbers only, or hidden), and the real-plan-usage opt-in.
+A normal preferences window with General, Usage and About panes: launch at login, whether the icon pulses and whether blocked sessions raise a notification, how the usage section is drawn (bars, numbers only, or hidden), and the real-plan-usage opt-in. With real plan usage on, Ampel can also notify you when the 5-hour or 7-day limit passes 80%.
 
 ## Documents
 

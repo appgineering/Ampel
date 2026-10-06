@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: StatusItemController?
     private var watcher: EventWatcher?
     private var sweep: Timer?
+    private var usageWarning = UsageWarning()
     private var observation: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -52,8 +53,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.showOnboardingIfNeeded()
         CrashPrompt.showIfNeeded()
 
-        sweep = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [store] _ in
-            Task { @MainActor in store.sweepStale() }
+        checkUsage()
+        sweep = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.store.sweepStale()
+                self?.checkUsage()
+            }
+        }
+    }
+
+    // ponytail: polls usage.json on the minute timer, so a reading can be a
+    // minute old. Watch ~/.ampel with a DispatchSource if that lag matters.
+    private func checkUsage() {
+        controller?.usage.refreshPlan()
+        guard settings.warnOnUsage else { return }
+        for body in usageWarning.check(controller?.usage.snapshot?.plan) {
+            notifier.post(title: "Claude usage", body: body)
         }
     }
 

@@ -163,6 +163,34 @@ final class UsageTests: XCTestCase {
                        "a reported window is never overwritten by the carried one")
     }
 
+    // MARK: - Limit warning
+
+    private func plan(five: Double, resetsIn: TimeInterval = 3600, at now: Date) -> PlanUsage {
+        PlanUsage(fiveHour: .init(usedPercentage: five, resetsAt: now.addingTimeInterval(resetsIn)),
+                  sevenDay: nil, spendLimit: nil, capturedAt: now)
+    }
+
+    /// Checked once a minute, so anything short of "once per crossing" would
+    /// notify every minute for the rest of the window.
+    func testWarnsOncePerCrossingAndAgainAfterAReset() {
+        let now = Date()
+        var warning = UsageWarning()
+        XCTAssertEqual(warning.check(plan(five: 79, at: now), now: now), [])
+        XCTAssertEqual(warning.check(plan(five: 80, at: now), now: now).count, 1)
+        XCTAssertEqual(warning.check(plan(five: 95, at: now), now: now), [], "already said so")
+        XCTAssertEqual(warning.check(plan(five: 3, at: now), now: now), [], "the window reset")
+        XCTAssertEqual(warning.check(plan(five: 81, at: now), now: now).count, 1)
+        XCTAssertEqual(warning.check(nil, now: now), [])
+    }
+
+    /// usage.json keeps its last reading while no session is open, so the
+    /// first check after a launch can find a window that reset hours ago.
+    func testAReadingFromAWindowThatAlreadyResetIsNotAWarning() {
+        let now = Date()
+        var warning = UsageWarning()
+        XCTAssertEqual(warning.check(plan(five: 97, resetsIn: -60, at: now), now: now), [])
+    }
+
     func testSnapshotSurvivesEncodingForTheCache() throws {
         let blocks = try object("""
         {"blocks":[{"isActive":true,"costUSD":3.5,"totalTokens":100,

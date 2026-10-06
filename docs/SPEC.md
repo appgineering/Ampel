@@ -197,3 +197,7 @@ ccusage reports an estimated dollar cost derived from local transcripts. On a Ma
 `statusLine` holds a single command, so `StatuslineInstaller` saves the existing one to `~/.ampel/statusline-inner` and installs a wrapper that stores the payload at `~/.ampel/usage.json` and then runs the original, passing its output through. With no previous statusline it prints a compact usage line of its own rather than leaving an empty row. Turning the setting off restores the original command.
 
 This is off by default and opt-in from settings, because it is the one part of Ampel that takes over a config the user may already be using.
+
+### Limit warning
+
+Opt-in under Settings > Usage, and only available with real plan usage on. `AppDelegate` re-reads `usage.json` on the 60s housekeeping timer (`UsageProvider.refreshPlan()`, a file read, never ccusage) and hands the result to `UsageWarning`, which posts one notification when the 5-hour or 7-day window reaches 80%. It warns once per crossing: the window has to drop back under the threshold, which means reset, before it can warn again. A reading whose `resets_at` has already passed is ignored, because `usage.json` keeps its last value while no session is open. The state is in memory, so a relaunch above the threshold warns once more.
