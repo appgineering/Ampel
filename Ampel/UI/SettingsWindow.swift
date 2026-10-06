@@ -59,7 +59,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
     /// click away, which is what someone does the instant they read a step.
     func showOnboarding() {
         let window = onboarding ?? {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 460),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
                                   styleMask: [.titled, .closable],
                                   backing: .buffered, defer: false)
             window.title = "Welcome to Ampel"

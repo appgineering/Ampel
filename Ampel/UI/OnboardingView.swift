@@ -35,7 +35,7 @@ struct OnboardingView: View {
             }
             .padding(16)
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 520, height: 500)
     }
 
     @ViewBuilder
@@ -43,7 +43,7 @@ struct OnboardingView: View {
         switch step {
         case 0: welcome
         case 1: HooksStep()
-        case 2: PlanUsageStep()
+        case 2: PlanUsageStep(settings: settings)
         default: appearance
         }
     }
@@ -76,6 +76,8 @@ struct OnboardingView: View {
             IconStylePicker(selection: $settings.iconStyle)
             Divider()
             LaunchAtLoginToggle()
+            Toggle("Notify when a turn of \(Int(AmpelStore.longTurn / 60)) minutes or more finishes",
+                   isOn: $settings.notifyOnFinish)
             Spacer()
             VStack(alignment: .leading, spacing: 4) {
                 Text("All of this lives in Settings, reachable from the menu whenever you want to change it.")
@@ -145,6 +147,8 @@ private struct HooksStep: View {
 
 /// Step three: the opt-in that takes over the statusLine slot.
 private struct PlanUsageStep: View {
+    @Bindable var settings: Settings
+
     private let statusline = StatuslineInstaller()
     @State private var enabled = false
     @State private var failure: String?
@@ -161,6 +165,12 @@ private struct PlanUsageStep: View {
 
             Toggle("Show real plan usage", isOn: $enabled)
                 .toggleStyle(.switch)
+            // Both read the same figures, so they have nothing to go on without it.
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Show the 5-hour limit next to the menu bar icon", isOn: $settings.showUsageInMenuBar)
+                Toggle("Notify when a limit passes \(Int(UsageWarning.threshold))%", isOn: $settings.warnOnUsage)
+            }
+            .disabled(!enabled)
             if let failure {
                 Label(failure, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout).foregroundStyle(.orange)
