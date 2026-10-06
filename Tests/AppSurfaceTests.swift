@@ -26,6 +26,7 @@ final class AppSurfaceTests: XCTestCase {
         XCTAssertTrue(settings.pulseOnAttention)
         XCTAssertTrue(settings.notifyOnAttention)
         XCTAssertFalse(settings.warnOnUsage, "new notifications are opt-in")
+        XCTAssertFalse(settings.notifyOnFinish, "new notifications are opt-in")
         XCTAssertFalse(settings.hasOnboarded, "a fresh install must see the setup guide")
     }
 
@@ -37,6 +38,7 @@ final class AppSurfaceTests: XCTestCase {
         settings.pulseOnAttention = false
         settings.notifyOnAttention = false
         settings.warnOnUsage = true
+        settings.notifyOnFinish = true
         settings.hasOnboarded = true
 
         let reopened = Settings(defaults: defaults)
@@ -45,6 +47,7 @@ final class AppSurfaceTests: XCTestCase {
         XCTAssertFalse(reopened.pulseOnAttention)
         XCTAssertFalse(reopened.notifyOnAttention)
         XCTAssertTrue(reopened.warnOnUsage)
+        XCTAssertTrue(reopened.notifyOnFinish)
         XCTAssertTrue(reopened.hasOnboarded)
     }
 

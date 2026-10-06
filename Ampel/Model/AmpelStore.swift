@@ -18,6 +18,20 @@ final class AmpelStore {
     @ObservationIgnored
     var onAttention: ((Session) -> Void)?
 
+    /// Called when a turn that ran for at least `longTurn` ends, with how long
+    /// it took. A closure for the same reason as `onAttention`.
+    @ObservationIgnored
+    var onFinished: ((Session, TimeInterval) -> Void)?
+
+    // ponytail: fixed. Make it a setting if three minutes suits nobody.
+    static let longTurn: TimeInterval = 180
+
+    /// How long a session may sit idle after a `SubagentStop` and still be in
+    /// the same turn. Claude Code wakes the main turn within seconds.
+    // ponytail: a wake-up slower than this splits the turn, and the finished
+    // notification is skipped. Read `<task-notification>` off the prompt if so.
+    static let wakeGrace: TimeInterval = 60
+
     @ObservationIgnored
     private let log = Log("store")
 
@@ -148,11 +162,32 @@ final class AmpelStore {
         let resolved: SessionActivity = blockedOn == nil ? activity : .attention
 
         let at = Date(timeIntervalSince1970: TimeInterval(envelope.receivedAt))
+
+        // Only a Stop ends a turn. A SubagentStop also lands on idle, but
+        // either the main turn is still running (a foreground agent) or Claude
+        // Code is about to wake it (the last background agent), so the start
+        // time is kept unless that follow-up never came.
+        var turnStarted = previous?.turnStarted
+        if let last = previous, last.activity == .idle,
+           at.timeIntervalSince(last.lastActivity) > Self.wakeGrace {
+            turnStarted = nil
+        }
+        var finishedAfter: TimeInterval?
+        if resolved != .idle {
+            turnStarted = turnStarted ?? at
+        } else if envelope.event != "SubagentStop" {
+            if envelope.event == "Stop", let turnStarted {
+                finishedAfter = at.timeIntervalSince(turnStarted)
+            }
+            turnStarted = nil
+        }
+
         var session = previous ?? Session(id: id, cwd: "", activity: resolved, lastActivity: at, lastMessage: nil)
         session.activity = resolved
         session.lastActivity = at
         session.blockedOn = blockedOn
         session.backgroundAgents = backgroundAgents
+        session.turnStarted = turnStarted
         if let cwd = envelope.payload.cwd { session.cwd = cwd }
         if let terminal = envelope.terminal, !terminal.isEmpty { session.terminal = terminal }
         // Keep the message only while it is the reason we are red.
@@ -165,6 +200,9 @@ final class AmpelStore {
 
         if resolved == .attention && previous?.activity != .attention {
             onAttention?(session)
+        }
+        if let finishedAfter, finishedAfter >= Self.longTurn {
+            onFinished?(session, finishedAfter)
         }
     }
 

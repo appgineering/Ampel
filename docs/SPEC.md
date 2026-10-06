@@ -116,6 +116,12 @@ Both payloads carry `background_tasks`, a list of `{id, type, status, descriptio
 
 `backgroundAgents` is cleared on `UserPromptSubmit` and `SessionStart`, because the count is only known at a stop.
 
+### A long turn finishing
+
+Opt-in under Settings > General: one notification when a turn that ran for three minutes or more ends ("Finished after 12 minutes"). `Session.turnStarted` is set by the first event that leaves `idle` and the notification is decided on `Stop`, through `AmpelStore.onFinished`.
+
+Only `Stop` ends a turn. A `SubagentStop` also lands on `idle`, but a foreground agent's is followed at once by the main turn's `PostToolUse`, and the last background agent's by the wake-up described above, so `turnStarted` survives it. The turn is then timed from the original prompt to the closing `Stop`, and announced once. If nothing follows a `SubagentStop` within 60 seconds the start time is dropped, so it is never charged to the next prompt; a wake-up slower than that costs the notification. Time spent red counts towards the duration.
+
 Every event updates `lastActivity` and `cwd`. Display name = `URL(fileURLWithPath: cwd).lastPathComponent`.
 
 Aggregate for the icon: `attention > working > idle`; `off` when no sessions.
@@ -151,6 +157,8 @@ Content top to bottom:
 4. Footer: "Settings…", "About", "Quit". "Install hooks…" appears above them only when setup is incomplete (§8). Launch at Login and the display preferences live in the settings window, not the popover.
 
 macOS notification (`UNUserNotificationCenter`) when a session transitions INTO `attention`: title = project name, body = payload `message` or "Claude needs your attention". Debounce: max one per session per 30s. Clicking a notification brings the session's terminal to the front, the same as clicking its row.
+
+Two further notifications are opt-in and off by default: a long turn finishing (§3) and a plan limit passing 80% (§11).
 
 ## 7. Usage section
 

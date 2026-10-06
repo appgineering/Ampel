@@ -50,6 +50,9 @@ struct Session: Identifiable, Codable {
     /// row brings to the front. Nil until the first event from a hook script
     /// new enough to report it.
     var terminal: String?
+    /// When the turn in progress began. Outlives a `SubagentStop`, which can
+    /// leave the session idle for a moment in the middle of a turn.
+    var turnStarted: Date?
 
     /// The row's state line. A session that stopped but is waiting on its
     /// background agents says so, since "Working" alone hides why.

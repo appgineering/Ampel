@@ -45,6 +45,10 @@ final class Settings {
         didSet { defaults.set(notifyOnAttention, forKey: Key.notify) }
     }
 
+    var notifyOnFinish: Bool {
+        didSet { defaults.set(notifyOnFinish, forKey: Key.notifyOnFinish) }
+    }
+
     /// Only has anything to go on while real plan usage is switched on.
     var warnOnUsage: Bool {
         didSet { defaults.set(warnOnUsage, forKey: Key.warnOnUsage) }
@@ -57,6 +61,7 @@ final class Settings {
         static let onboarded = "hasOnboarded"
         static let pulse = "pulseOnAttention"
         static let notify = "notifyOnAttention"
+        static let notifyOnFinish = "notifyOnFinish"
         static let warnOnUsage = "warnOnUsage"
     }
 
@@ -71,6 +76,7 @@ final class Settings {
         hasOnboarded = defaults.bool(forKey: Key.onboarded)
         pulseOnAttention = defaults.bool(forKey: Key.pulse)
         notifyOnAttention = defaults.bool(forKey: Key.notify)
+        notifyOnFinish = defaults.bool(forKey: Key.notifyOnFinish)
         warnOnUsage = defaults.bool(forKey: Key.warnOnUsage)
     }
 }

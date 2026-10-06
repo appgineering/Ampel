@@ -38,6 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notifier.notify(session)
         }
 
+        store.onFinished = { [notifier, settings] session, duration in
+            guard settings.notifyOnFinish else { return }
+            let took = Duration.seconds(duration)
+                .formatted(.units(allowed: [.hours, .minutes], width: .wide))
+            notifier.post(title: session.displayName, body: "Finished after \(took)",
+                          terminal: session.terminal)
+        }
+
         // Deleting ~/.ampel leaves settings.json pointing at scripts that are
         // gone. Put them back before anything else runs.
         HookInstaller().repairIfNeeded()

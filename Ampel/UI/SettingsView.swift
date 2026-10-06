@@ -25,6 +25,8 @@ struct GeneralSettingsView: View {
                 LaunchAtLoginToggle()
                 Toggle("Pulse the icon when a session is blocked", isOn: $settings.pulseOnAttention)
                 Toggle("Notify when a session is blocked", isOn: $settings.notifyOnAttention)
+                Toggle("Notify when a turn of \(Int(AmpelStore.longTurn / 60)) minutes or more finishes",
+                       isOn: $settings.notifyOnFinish)
             } footer: {
                 Text("A session is blocked when Claude is waiting on a decision from you, such as a permission prompt. Sitting at an empty prompt does not count.")
                     .font(.caption)

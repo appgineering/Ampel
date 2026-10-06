@@ -36,6 +36,70 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(store.sessions["a"]?.terminal, "com.mitchellh.ghostty")
     }
 
+    // MARK: - A long turn finishing
+
+    private func finishes(in store: AmpelStore) -> () -> [TimeInterval] {
+        final class Box { var durations: [TimeInterval] = [] }
+        let box = Box()
+        store.onFinished = { _, duration in box.durations.append(duration) }
+        return { box.durations }
+    }
+
+    func testOnlyALongTurnAnnouncesThatItFinished() throws {
+        let store = AmpelStore()
+        let finished = finishes(in: store)
+        store.apply(try envelope("UserPromptSubmit", "a", at: 1_000))
+        store.apply(try envelope("Stop", "a", at: 1_100))
+        XCTAssertEqual(finished(), [], "a short turn is one the person sat through")
+
+        store.apply(try envelope("UserPromptSubmit", "a", at: 2_000))
+        store.apply(try envelope("PreToolUse", "a", tool: "Bash", at: 2_100))
+        store.apply(try envelope("Stop", "a", at: 2_300))
+        XCTAssertEqual(finished(), [300], "timed from the prompt, not from the last stop")
+        XCTAssertNil(store.sessions["a"]?.turnStarted)
+    }
+
+    /// A foreground agent's SubagentStop lands on idle in the middle of the
+    /// turn. It must neither announce the turn nor restart its clock.
+    func testAnAgentFinishingMidTurnIsNotTheTurnFinishing() throws {
+        let store = AmpelStore()
+        let finished = finishes(in: store)
+        store.apply(try envelope("UserPromptSubmit", "a", at: 1_000))
+        store.apply(try envelope("SubagentStop", "a", agent: "x", at: 1_400))
+        XCTAssertEqual(finished(), [])
+        store.apply(try envelope("PostToolUse", "a", tool: "Agent", at: 1_401))
+        store.apply(try envelope("Stop", "a", at: 1_500))
+        XCTAssertEqual(finished(), [500])
+    }
+
+    /// With background agents the turn stops early, the last agent leaves the
+    /// session idle, and Claude Code then wakes the main turn to wrap up. One
+    /// announcement, at the very end, for the whole stretch.
+    func testATurnWaitingOnBackgroundAgentsFinishesWhenTheWrapUpDoes() throws {
+        let store = AmpelStore()
+        let finished = finishes(in: store)
+        let running = [["id": "x", "type": "subagent", "status": "running"]]
+        store.apply(try envelope("UserPromptSubmit", "a", at: 1_000))
+        store.apply(try envelope("Stop", "a", tasks: running, at: 1_010))
+        store.apply(try envelope("SubagentStop", "a", agent: "x", tasks: running, at: 1_600))
+        XCTAssertEqual(finished(), [])
+        store.apply(try envelope("UserPromptSubmit", "a", at: 1_603))
+        store.apply(try envelope("Stop", "a", at: 1_620))
+        XCTAssertEqual(finished(), [620])
+    }
+
+    /// If that wake-up never comes, the old start time must not be charged to
+    /// whatever the person asks next.
+    func testAStartTimeLeftBehindIsNotCarriedIntoTheNextTurn() throws {
+        let store = AmpelStore()
+        let finished = finishes(in: store)
+        store.apply(try envelope("UserPromptSubmit", "a", at: 1_000))
+        store.apply(try envelope("SubagentStop", "a", agent: "x", at: 1_400))
+        store.apply(try envelope("UserPromptSubmit", "a", at: 5_000))
+        store.apply(try envelope("Stop", "a", at: 5_010))
+        XCTAssertEqual(finished(), [])
+    }
+
     // MARK: - A question waiting on the person
 
     /// Claude Code sends no Notification when it puts a question on screen, so
