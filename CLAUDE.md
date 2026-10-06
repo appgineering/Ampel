@@ -12,7 +12,7 @@ macOS menu bar app showing Claude Code session status as a traffic light. Read `
 
 ## Tech constraints (non-negotiable)
 
-- Swift 5.10+, SwiftUI, deployment target macOS 14.0.
+- Swift 6 language mode, SwiftUI, deployment target macOS 14.0.
 - The menu bar item is an `NSStatusItem` owned by `StatusItemController`, not `MenuBarExtra`. `MenuBarExtra` exposes no right-click and re-renders its whole scene on every label change, which cost 23% CPU for the attention pulse. All content is still SwiftUI, hosted in an `NSPopover` and two plain `NSWindow`s.
 - The Xcode project is generated from `project.yml` via XcodeGen. Never hand-edit the `.pbxproj`; change `project.yml` and run `xcodegen generate`. New source files under `Ampel/` are picked up automatically on regeneration.
 - App bundle `Ampel.app`, bundle id `com.appgineering.ampel`.
