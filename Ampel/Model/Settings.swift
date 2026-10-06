@@ -45,6 +45,12 @@ final class Settings {
         didSet { defaults.set(notifyOnAttention, forKey: Key.notify) }
     }
 
+    /// The five hour limit as a percentage beside the icon. Like
+    /// `warnOnUsage`, it needs real plan usage to have anything to show.
+    var showUsageInMenuBar: Bool {
+        didSet { defaults.set(showUsageInMenuBar, forKey: Key.showUsageInMenuBar) }
+    }
+
     var notifyOnFinish: Bool {
         didSet { defaults.set(notifyOnFinish, forKey: Key.notifyOnFinish) }
     }
@@ -61,6 +67,7 @@ final class Settings {
         static let onboarded = "hasOnboarded"
         static let pulse = "pulseOnAttention"
         static let notify = "notifyOnAttention"
+        static let showUsageInMenuBar = "showUsageInMenuBar"
         static let notifyOnFinish = "notifyOnFinish"
         static let warnOnUsage = "warnOnUsage"
     }
@@ -76,6 +83,7 @@ final class Settings {
         hasOnboarded = defaults.bool(forKey: Key.onboarded)
         pulseOnAttention = defaults.bool(forKey: Key.pulse)
         notifyOnAttention = defaults.bool(forKey: Key.notify)
+        showUsageInMenuBar = defaults.bool(forKey: Key.showUsageInMenuBar)
         notifyOnFinish = defaults.bool(forKey: Key.notifyOnFinish)
         warnOnUsage = defaults.bool(forKey: Key.warnOnUsage)
     }

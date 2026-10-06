@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = settings.iconStyle
             _ = settings.iconScale
             _ = settings.pulseOnAttention
+            _ = settings.showUsageInMenuBar
             // The ring style draws usage, so a refreshed snapshot must redraw.
             _ = controller?.usage.snapshot
             controller?.update()

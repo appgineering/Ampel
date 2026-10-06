@@ -25,6 +25,7 @@ final class AppSurfaceTests: XCTestCase {
         XCTAssertEqual(settings.usageStyle, .bars)
         XCTAssertTrue(settings.pulseOnAttention)
         XCTAssertTrue(settings.notifyOnAttention)
+        XCTAssertFalse(settings.showUsageInMenuBar, "the menu bar item stays icon only")
         XCTAssertFalse(settings.warnOnUsage, "new notifications are opt-in")
         XCTAssertFalse(settings.notifyOnFinish, "new notifications are opt-in")
         XCTAssertFalse(settings.hasOnboarded, "a fresh install must see the setup guide")
@@ -38,6 +39,7 @@ final class AppSurfaceTests: XCTestCase {
         settings.pulseOnAttention = false
         settings.notifyOnAttention = false
         settings.warnOnUsage = true
+        settings.showUsageInMenuBar = true
         settings.notifyOnFinish = true
         settings.hasOnboarded = true
 
@@ -47,6 +49,7 @@ final class AppSurfaceTests: XCTestCase {
         XCTAssertFalse(reopened.pulseOnAttention)
         XCTAssertFalse(reopened.notifyOnAttention)
         XCTAssertTrue(reopened.warnOnUsage)
+        XCTAssertTrue(reopened.showUsageInMenuBar)
         XCTAssertTrue(reopened.notifyOnFinish)
         XCTAssertTrue(reopened.hasOnboarded)
     }

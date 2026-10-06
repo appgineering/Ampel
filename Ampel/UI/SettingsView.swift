@@ -59,6 +59,8 @@ struct UsageSettingsView: View {
 
             Section {
                 Toggle("Show real plan usage", isOn: $planUsage)
+                Toggle("Show the 5-hour limit next to the menu bar icon", isOn: $settings.showUsageInMenuBar)
+                    .disabled(!planUsage)
                 Toggle("Notify when a limit passes \(Int(UsageWarning.threshold))%", isOn: $settings.warnOnUsage)
                     .disabled(!planUsage)
                 if let failure {

@@ -35,6 +35,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         if let button = statusItem.button {
             button.image = StatusIcon.image(settings.iconStyle, IconContext(), scale: settings.iconScale)
+            // Fixed width digits, so the item does not shift as the figure changes.
+            button.font = .monospacedDigitSystemFont(
+                ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
             button.target = self
             button.action = #selector(togglePopover)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -53,6 +56,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         var progress: Double?
         var attention: Int
         var pulsing: Bool
+        var label: String
     }
 
     func showOnboardingIfNeeded() {
@@ -69,12 +73,18 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             colors: sessions.map(\.activity.color),
             progress: progress,
             attention: sessions.filter { $0.activity == .attention }.count,
-            pulsing: store.aggregate == .attention && settings.pulseOnAttention)
+            pulsing: store.aggregate == .attention && settings.pulseOnAttention,
+            label: label)
         guard key != rendered else { return }
         let wasPulsing = rendered?.pulsing ?? false
         rendered = key
 
         guard let button = statusItem.button else { return }
+        // Square while there is only the icon, so turning the label off puts
+        // the item back exactly as it was.
+        statusItem.length = key.label.isEmpty ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        button.title = key.label
+        button.imagePosition = key.label.isEmpty ? .imageOnly : .imageLeading
         button.image = StatusIcon.image(key.style, IconContext(
             aggregate: key.aggregate,
             sessionColors: key.colors,
@@ -110,6 +120,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var progress: Double? {
         if let five = usage.snapshot?.plan?.fiveHour { return five.usedPercentage / 100 }
         return usage.snapshot?.blockProgress
+    }
+
+    /// The five hour limit as text beside the icon, when asked for and known.
+    private var label: String {
+        guard settings.showUsageInMenuBar, let five = usage.snapshot?.plan?.fiveHour else { return "" }
+        return UsageProvider.percent(five.usedPercentage)
     }
 
     private static let pulseKey = "ampel.pulse"
